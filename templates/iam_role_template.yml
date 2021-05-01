@@ -1,12 +1,14 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Description: >
   This template creates an IAM Role
-  and a Managed Policy that allows
-  a lambda to join a VPC
+  that allows a lambda to join a VPC.
+  It also creates a lambda and attaches
+  the new role.
 Resources:
-  CaptainHook-LambdaVPCRole:
+  CaptainHookLambdaVPCRole:
     Type: "AWS::IAM::Role"
     Properties:
+      RoleName: "CaptainHook-LambdaVPCRole"
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
         Statement:
@@ -18,3 +20,15 @@ Resources:
               - sts:AssumeRole
       ManagedPolicyArns:
         - "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
+  TestDBConnectionFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Handler: "index.handler"
+      Role: !GetAtt CaptainHookLambdaVPCRole.Arn
+      Code:
+        ZipFile: !Sub |
+          exports.handler = async (event, context) => {
+             const text = "Test DB connection";
+             console.log(text);
+          };
+      Runtime: nodejs12.x
