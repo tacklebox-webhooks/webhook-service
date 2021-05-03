@@ -24,7 +24,7 @@ const getEventTypeInfo = async (uuid) => {
 const saveEndpointToDb = async (userId, url) => {
   const text =
     "INSERT INTO endpoints(user_id, url) VALUES($1, $2) RETURNING id, uuid, url, created_at";
-  const values = [userIdPk, url];
+  const values = [userId, url];
   const response = await db.query(text, values);
   return response.rows[0];
 };
@@ -71,7 +71,7 @@ const createEndpoint = async (userId, url, eventTypes) => {
     const snsParams = {
       Protocol: "https",
       TopicArn: eventTypeInfo.sns_topic_arn,
-      Attributes: { RawMessageDelivery: true },
+      Attributes: { RawMessageDelivery: "true" },
       Endpoint: endpoint.url,
       ReturnSubscriptionArn: true,
     };
@@ -117,10 +117,10 @@ const listEndpoints = async (userId) => {
   }
 };
 
-const getEndpoint = async (eventTypeId) => {
+const getEndpoint = async (endpointId) => {
   const text =
-    "SELECT uuid, name, sns_topic_arn, created_at FROM event_types WHERE uuid = $1 AND deleted_at IS NULL";
-  const values = [eventTypeId];
+    "SELECT uuid, url, created_at FROM endpoints WHERE deleted_at IS NULL AND uuid = $1";
+  const values = [endpointId];
 
   try {
     const response = await db.query(text, values);
