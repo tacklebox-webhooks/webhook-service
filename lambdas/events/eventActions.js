@@ -64,13 +64,14 @@ const addEventToSNS = async (event, topic_arn) => {
   const params = {
     TopicArn: topic_arn,
     Message: JSON.stringify(event.payload),
-    // MessageAttributes: {
-    //   'url': { // need to know what attribute name we're using for this if not url!!!
-    //     DataType: 'String',
-    //     StringValue: endpoint,
-    //   },
-    // },
+    MessageAttributes: {
+      user_uuid: {
+        DataType: "String",
+        StringValue: event.user_id,
+      },
+    },
   };
+
   await sns.publish(params).promise();
 };
 
