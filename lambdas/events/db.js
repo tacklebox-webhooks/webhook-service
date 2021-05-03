@@ -13,19 +13,19 @@ const pool = new Pool({
   port,
 });
 
-// const serviceUuidToPK = async (uuid) => {
-//   const text = "SELECT id FROM users WHERE uuid = $1";
-//   const values = [uuid];
+const serviceUuidToPK = async (table, uuid) => {
+  const text = `SELECT id FROM ${table} WHERE uuid = $1`;
+  const values = [uuid];
 
-//   try {
-//     const response = await pool.query(text, values);
-//     const responseBody = response.rows[0];
-//     return responseBody.id;
-//   } catch(error) {
-//     console.log(error);
-//     return;
-//   }
-// };
+  try {
+    const response = await pool.query(text, values);
+    const responseBody = response.rows[0];
+    return responseBody.id;
+  } catch (error) {
+    console.log(error);
+    return;
+  }
+};
 
 module.exports.db = pool;
-// module.exports.serviceUuidToPK = serviceUuidToPK;
+module.exports.serviceUuidToPK = serviceUuidToPK;
