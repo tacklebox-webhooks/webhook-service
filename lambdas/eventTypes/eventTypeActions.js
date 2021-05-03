@@ -2,6 +2,7 @@ const AWS = require("aws-sdk");
 AWS.config.update({ region: "us-east-1" });
 const sns = new AWS.SNS({ apiVersion: "2010-03-31" });
 const cwlogs = new AWS.CloudWatchLogs({ apiVersion: "2014-03-28" });
+const lambda = new AWS.Lambda({ apiVersion: "2015-03-31" });
 const { db } = require("./db");
 
 const serviceUuidToPK = async (uuid) => {
@@ -53,9 +54,6 @@ const createEventType = async (name, serviceId) => {
 
   // Create log groups for SNS to use
 
-  // var destinationArn =
-  //   "arn:aws:lambda:us-east-2:169534841384:function:logMessage";
-  // var filterPattern = "";
   // var logGroupName1 = `sns/us-east-2/169534841384/${Name}`;
   // var createLogGroupParams1 = {
   //   logGroupName: logGroupName1,
@@ -63,31 +61,45 @@ const createEventType = async (name, serviceId) => {
   // Dont delete below
   const region = "us-east-1";
   const accountId = "946221510390";
-  const logGroupName1 = `sns/${region}/${accountId}/${snsTopicName}`;
-  console.log(logGroupName1);
+  const logGroupName = `sns/${region}/${accountId}/${snsTopicName}`;
+  const logGroupNameFailure = `${logGroupName}/Failure`;
+  const destinationArn = `arn:aws:lambda:${region}:${accountId}:function:CaptainHook_LogMessages`;
 
-  cwlogs.createLogGroup({ logGroupName: logGroupName1 }, (err, data) => {
-    if (err) console.log(err, err.stack);
-    // an error occurred
-    else console.log(data); // successful response
-  });
+  try {
+    await cwlogs.createLogGroup({ logGroupName: logGroupName }).promise();
+    await cwlogs
+      .createLogGroup({ logGroupName: logGroupNameFailure })
+      .promise();
+    // Add permissions to logMessage lambda
+    const lambdaParams = {
+      Action: "lambda:InvokeFunction",
+      FunctionName: "CaptainHook_LogMessages",
+      Principal: `logs.${region}.amazonaws.com`,
+      SourceArn: `arn:aws:logs:${region}:${accountId}:log-group:${logGroupName}:*`,
+      StatementId: `${snsTopicName}SuccessTrigger`,
+    };
 
-  // try {
-  //   console.log("Here");
-  //   // const logGroupName1 = `sns/${region}/${accountId}/${snsTopicName}`;
-  //   console.log(logGroupName1);
-  //   const result = await cwlogs
-  //     .createLogGroup({
-  //       logGroupName: logGroupName1,
-  //     })
-  //     .promise();
-  //   console.log(result);
-  // } catch (error) {
-  //   console.error(
-  //     "Unable to send Create Log Group Request. Error JSON:",
-  //     error
-  //   );
-  // }
+    const lambdaResult = await lambda.addPermission(lambdaParams).promise();
+    console.log(lambdaResult);
+    // Tell log group to invoke lambda
+    const putSubscriptionFilterParams1 = {
+      destinationArn,
+      filterName: lambdaParams.StatementId,
+      filterPattern: "",
+      logGroupName,
+    };
+
+    const cwlogsResponse = await cwlogs
+      .putSubscriptionFilter(putSubscriptionFilterParams1)
+      .promise();
+
+    console.log(cwlogsResponse);
+  } catch (error) {
+    console.error(
+      "Unable to send Create Log Group Request. Error JSON:",
+      error
+    );
+  }
 
   // cwlogs.createLogGroup(createLogGroupParams1, function (err, data) {
   //   if (err) {
