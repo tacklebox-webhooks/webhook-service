@@ -67,11 +67,17 @@ const createEndpoint = async (userId, url, eventTypes) => {
       console.error(error);
       continue;
     }
+    const FilterPolicy = JSON.stringify({ user_uuid: [userId] });
+
+    const snsAttributes = {
+      RawMessageDelivery: "true",
+      FilterPolicy,
+    };
 
     const snsParams = {
       Protocol: "https",
       TopicArn: eventTypeInfo.sns_topic_arn,
-      Attributes: { RawMessageDelivery: "true" },
+      Attributes: snsAttributes,
       Endpoint: endpoint.url,
       ReturnSubscriptionArn: true,
     };
