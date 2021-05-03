@@ -1,6 +1,7 @@
 const AWS = require("aws-sdk");
 AWS.config.update({ region: "us-east-1" });
 const sns = new AWS.SNS({ apiVersion: "2010-03-31" });
+const cwlogs = new AWS.CloudWatchLogs({ apiVersion: "2014-03-28" });
 const { db } = require("./db");
 
 const serviceUuidToPK = async (uuid) => {
@@ -22,8 +23,20 @@ const createEventType = async (name, serviceId) => {
     return newResponse(500, { Error: "Could not create event type" });
   }
 
+  const snsTopicName = `CaptainHook_${serviceId}_${name}`;
+  const HTTPSuccessFeedbackRoleArn =
+    "arn:aws:iam::946221510390:role/SNSSuccessFeedback";
+  const HTTPFailureFeedbackRoleArn =
+    "arn:aws:iam::946221510390:role/SNSFailureFeedback";
+  const HTTPSuccessFeedbackSampleRate = "100";
+
   const snsParams = {
-    Name: `CaptainHook_${serviceId}_${name}`,
+    Name: snsTopicName,
+    Attributes: {
+      HTTPSuccessFeedbackRoleArn,
+      HTTPFailureFeedbackRoleArn,
+      HTTPSuccessFeedbackSampleRate,
+    },
   };
 
   // CreateTopic is idempotent, so if topic with given name already
@@ -38,6 +51,101 @@ const createEventType = async (name, serviceId) => {
     console.error(error);
   }
 
+  // Create log groups for SNS to use
+
+  // var destinationArn =
+  //   "arn:aws:lambda:us-east-2:169534841384:function:logMessage";
+  // var filterPattern = "";
+  // var logGroupName1 = `sns/us-east-2/169534841384/${Name}`;
+  // var createLogGroupParams1 = {
+  //   logGroupName: logGroupName1,
+  // };
+  // Dont delete below
+  const region = "us-east-1";
+  const accountId = "946221510390";
+  const logGroupName1 = `sns/${region}/${accountId}/${snsTopicName}`;
+  console.log(logGroupName1);
+
+  cwlogs.createLogGroup({ logGroupName: logGroupName1 }, (err, data) => {
+    if (err) console.log(err, err.stack);
+    // an error occurred
+    else console.log(data); // successful response
+  });
+
+  // try {
+  //   console.log("Here");
+  //   // const logGroupName1 = `sns/${region}/${accountId}/${snsTopicName}`;
+  //   console.log(logGroupName1);
+  //   const result = await cwlogs
+  //     .createLogGroup({
+  //       logGroupName: logGroupName1,
+  //     })
+  //     .promise();
+  //   console.log(result);
+  // } catch (error) {
+  //   console.error(
+  //     "Unable to send Create Log Group Request. Error JSON:",
+  //     error
+  //   );
+  // }
+
+  // cwlogs.createLogGroup(createLogGroupParams1, function (err, data) {
+  //   if (err) {
+  //     console.error(
+  //       "Unable to send Create Log Group Request. Error JSON:",
+  //       JSON.stringify(err, null, 2)
+  //     );
+  //   } else {
+  //     const lambdaParams = {
+  //       Action: "lambda:InvokeFunction",
+  //       FunctionName: "logMessage",
+  //       Principal: "logs.us-east-2.amazonaws.com",
+  //       SourceArn: `arn:aws:logs:us-east-2:169534841384:log-group:sns/us-east-2/169534841384/${Name}:*`,
+  //       StatementId: `${Name}SuccessTrigger`,
+  //     };
+
+  //     lambda.addPermission(lambdaParams, function (err, data) {
+  //       if (err) {
+  //         console.error(
+  //           "Unable to send Add Permission Request. Error JSON:",
+  //           JSON.stringify(err, null, 2)
+  //         );
+  //       } else {
+  //         var putSubscriptionFilterParams1 = {
+  //           destinationArn,
+  //           filterName: StatementId1,
+  //           filterPattern,
+  //           logGroupName: logGroupName1,
+  //         };
+
+  //         cwlogs.putSubscriptionFilter(
+  //           putSubscriptionFilterParams1,
+  //           function (err, data) {
+  //             if (err) {
+  //               console.error(
+  //                 "Unable to send Put Subscription Filter Request. Error JSON:",
+  //                 JSON.stringify(err, null, 2)
+  //               );
+  //             } else {
+  //               console.log(
+  //                 "Results from Put Subscription Filter Request: ",
+  //                 JSON.stringify(data, null, 2)
+  //               );
+  //             }
+  //           }
+  //         );
+  //         console.log(
+  //           "Results from Add Permission Request: ",
+  //           JSON.stringify(data, null, 2)
+  //         );
+  //       }
+  //     });
+  //     console.log(
+  //       "Results from Create Log Group Request: ",
+  //       JSON.stringify(data, null, 2)
+  //     );
+  //   }
+  // });
   const text =
     "INSERT INTO event_types(name, service_id, sns_topic_arn) VALUES($1, $2, $3) RETURNING uuid, name, sns_topic_arn, created_at";
   const values = [name, serviceIdPk, TopicArn];
