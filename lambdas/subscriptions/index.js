@@ -1,43 +1,51 @@
 "use strict";
 const {
-  deleteEndpoint,
+  // deleteEndpoint,
   getEndpoint,
   createEndpoint,
   listEndpoints,
 } = require("./endpointActions");
+const { newResponse, isValidService, isValidUser } = require("./utils");
 
 exports.handler = async (event) => {
-  let {
-    pathParameters,
-    httpMethod,
-    body,
-    // headers
-  } = event;
-
+  let { pathParameters, httpMethod, body } = event;
   body = JSON.parse(body);
-  const serviceId = pathParameters ? pathParameters.service_id : undefined;
-  const userId = pathParameters ? pathParameters.user_id : undefined;
-  const endpointId = pathParameters
-    ? pathParameters.subscription_id
-    : undefined;
 
-  if (endpointId) {
+  const userUuid = pathParameters ? pathParameters.user_id : pathParameters;
+  if (!(await isValidUser(userUuid))) {
+    return newResponse(404, {
+      error_Type: "data_not_found",
+      detail: "No user matches given uuid.",
+    });
+  }
+
+  const serviceUuid = pathParameters
+    ? pathParameters.service_id
+    : pathParameters;
+  if (!(await isValidService(serviceUuid))) {
+    return newResponse(404, {
+      error_Type: "data_not_found",
+      detail: "No service matches given uuid.",
+    });
+  }
+
+  const endpointUuid = pathParameters
+    ? pathParameters.subscription_id
+    : pathParameters;
+
+  if (endpointUuid) {
     switch (httpMethod) {
-      case "DELETE":
-        console.log("DELETE");
-        return await deleteEndpoint(endpointId);
+      // case "DELETE":
+      //   return await deleteEndpoint(endpointId);
       case "GET":
-        console.log("GET EVENT");
-        return await getEndpoint(endpointId);
+        return await getEndpoint(endpointUuid);
     }
   } else {
     switch (httpMethod) {
       case "POST":
-        console.log("POST");
-        return await createEndpoint(userId, body.url, body.eventTypes);
+        return await createEndpoint(userUuid, body.url, body.eventTypes);
       case "GET":
-        console.log("LIST EVENTS");
-        return await listEndpoints(userId);
+        return await listEndpoints(userUuid);
     }
   }
 };
