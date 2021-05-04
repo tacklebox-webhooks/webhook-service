@@ -18,7 +18,7 @@ exports.handler = async (event) => {
 
   if (isResend && httpMethod === "POST") {
     console.log("Resending message");
-    return await resendMessage(messageUuid);
+    return await resendMessage(messageUuid, serviceUuid);
   } else if (messageUuid && httpMethod === "GET") {
     console.log("Getting message");
     return await getMessage(messageUuid);

@@ -13,8 +13,8 @@ const pool = new Pool({
   port,
 });
 
-const serviceUuidToPK = async (uuid) => {
-  const text = "SELECT id FROM users WHERE uuid = $1";
+const serviceUuidToPK = async (table, uuid) => {
+  const text = `SELECT id FROM ${table} WHERE uuid = $1`;
   const values = [uuid];
 
   try {

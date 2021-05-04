@@ -2,12 +2,22 @@ const { db, serviceUuidToPK } = require("./db");
 const AWS = require("aws-sdk");
 const sns = new AWS.SNS({ apiVersion: "2010-03-31" });
 
-const resendMessage = async (messageUuid) => {
-  const params = await getMessageParams(messageUuid);
-
-  if (!params) {
+const resendMessage = async (messageUuid, serviceUuid) => {
+  const message = await getMessageForSNS(messageUuid);
+  if (!message) {
     return newResponse(404, { Error: "Could not find message to resend" });
   }
+
+  let resend_arn = await getResendArn();
+  if (!resend_arn) {
+    resend_arn = await createResendArn(serviceUuid);
+
+    if (!resend_arn) {
+      return newResponse(500, { Error: "Could not resend message" });
+    }
+  }
+
+  const params = createParams(message, resend_arn);
 
   try {
     await sns.publish(params).promise();
@@ -18,11 +28,10 @@ const resendMessage = async (messageUuid) => {
   }
 };
 
-const getMessageParams = async (messageUuid) => {
-  const text = `SELECT messages.endpoint, events.payload, event_types.sns_topic_arn
+const getMessageForSNS = async (messageUuid) => {
+  const text = `SELECT messages.endpoint, events.payload
     FROM messages
     JOIN events ON messages.event_id = events.id
-    JOIN event_types ON events.event_type_id = event_types.id
     WHERE messages.uuid = $1`;
   const values = [messageUuid];
 
@@ -31,21 +40,80 @@ const getMessageParams = async (messageUuid) => {
     if (!response.rows) return;
 
     const messageData = response.rows[0];
-    return constructParams(messageData);
+    return messageData;
   } catch (error) {
     console.error(error);
     return;
   }
 };
 
-const constructParams = (messageData) => {
-  const { endpoint, payload, sns_topic_arn } = messageData;
+const getResendArn = async () => {
+  const queryString =
+    "SELECT sns_topic_arn FROM event_types WHERE name = 'test_manual_message'";
+
+  try {
+    const response = await db.query(queryString);
+    if (response.rows.length === 0) return;
+
+    const messageData = response.rows[0];
+    return messageData.sns_topic_arn;
+  } catch (error) {
+    console.log(error);
+    return;
+  }
+};
+
+const createResendArn = async (serviceUuid) => {
+  try {
+    const sns_topic_arn = await addResendToSNS(serviceUuid);
+    await addResendToDb(sns_topic_arn, serviceUuid);
+    return sns_topic_arn;
+  } catch (error) {
+    console.log(error);
+    return;
+  }
+};
+
+const addResendToSNS = async (serviceUuid) => {
+  const snsTopicName = `CaptainHook_${serviceUuid}_test_manual_message`;
+  const HTTPSuccessFeedbackRoleArn =
+    "arn:aws:iam::946221510390:role/SNSSuccessFeedback";
+  const HTTPFailureFeedbackRoleArn =
+    "arn:aws:iam::946221510390:role/SNSFailureFeedback";
+  const HTTPSuccessFeedbackSampleRate = "100";
+
+  const snsParams = {
+    Name: snsTopicName,
+    Attributes: {
+      HTTPSuccessFeedbackRoleArn,
+      HTTPFailureFeedbackRoleArn,
+      HTTPSuccessFeedbackSampleRate,
+    },
+  };
+
+  const topic = await sns.createTopic(snsParams).promise();
+  return topic.TopicArn;
+};
+
+const addResendToDb = async (sns_topic_arn, serviceUuid) => {
+  const serviceId = await serviceUuidToPK("services", serviceUuid);
+
+  if (!serviceId) {
+    throw new Error("Service Id not valid");
+  }
+
+  const text = `INSERT INTO event_types (service_id, name, sns_topic_arn) VALUES ($1, $2, $3)`;
+  const values = [serviceId, "test_manual_message", sns_topic_arn];
+  await db.query(text, values);
+};
+
+const createParams = (message, resend_arn) => {
+  const { endpoint, payload } = message;
   return {
-    TopicArn: sns_topic_arn,
+    TopicArn: resend_arn,
     Message: JSON.stringify(payload),
     MessageAttributes: {
-      url: {
-        // need to know what attribute name we're using for this if not url!!!
+      endpoint_url: {
         DataType: "String",
         StringValue: endpoint,
       },
@@ -53,10 +121,10 @@ const constructParams = (messageData) => {
   };
 };
 
-const getMessage = async (messageId) => {
+const getMessage = async (messageUuid) => {
   const text = `SELECT uuid, event_id, endpoint, delivery_attempts
     FROM messages WHERE uuid = $1`;
-  const values = [messageId];
+  const values = [messageUuid];
 
   try {
     const response = await db.query(text, values);
@@ -72,21 +140,13 @@ const getMessage = async (messageId) => {
   }
 };
 
-const listMessages = async (userId) => {
-  userId = await serviceUuidToPK(userId);
-
-  if (!userId) {
-    return newResponse(404, {
-      Error: "Could not find user associated to message",
-    });
-  }
-
+const listMessages = async (userUuid) => {
   const text = `SELECT messages.uuid, event_id, endpoint, delivery_attempts, delivered_at
     FROM messages
     JOIN events ON messages.event_id = events.id
     JOIN users ON events.user_id = users.id
-    WHERE users.id = $1`;
-  const values = [userId];
+    WHERE users.uuid = $1`;
+  const values = [userUuid];
 
   try {
     const response = await db.query(text, values);
