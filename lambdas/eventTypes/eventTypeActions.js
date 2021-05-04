@@ -25,6 +25,7 @@ const createEventType = async (name, serviceId) => {
   }
 
   const snsTopicName = `CaptainHook_${serviceId}_${name}`;
+
   const HTTPSuccessFeedbackRoleArn =
     "arn:aws:iam::946221510390:role/SNSSuccessFeedback";
   const HTTPFailureFeedbackRoleArn =
@@ -53,12 +54,6 @@ const createEventType = async (name, serviceId) => {
   }
 
   // Create log groups for SNS to use
-
-  // var logGroupName1 = `sns/us-east-2/169534841384/${Name}`;
-  // var createLogGroupParams1 = {
-  //   logGroupName: logGroupName1,
-  // };
-  // Dont delete below
   const region = "us-east-1";
   const accountId = "946221510390";
   const logGroupName = `sns/${region}/${accountId}/${snsTopicName}`;
