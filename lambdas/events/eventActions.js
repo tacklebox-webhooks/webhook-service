@@ -1,33 +1,48 @@
-const { db, serviceUuidToPK } = require("./db");
+const { db, queries } = require("./db");
+const { newResponse, uuidToId } = require("./utils");
 const AWS = require("aws-sdk");
 const sns = new AWS.SNS({ apiVersion: "2010-03-31" });
 
 const getEvent = async (eventUuid) => {
-  const text = `SELECT events.uuid, event_types.uuid as event_type_id, users.uuid as user_id, payload, idempotency_key
-    FROM events 
-    JOIN event_types ON events.event_type_id = event_types.id
-    JOIN users ON events.user_id = users.id
-    WHERE events.uuid = $1`;
+  const text = queries.getEvent;
   const values = [eventUuid];
 
   try {
     const response = await db.query(text, values);
-    if (response.rows.length === 0) {
-      return newResponse(404, { Error: "Event not found" });
+    const event = response.rows[0];
+
+    if (!event) {
+      return newResponse(404, {
+        error_type: "data_not_found",
+        detail: "No event matches given uuid.",
+      });
     }
 
-    let event = response.rows[0];
     return newResponse(200, event);
   } catch (error) {
     console.error(error);
-    return newResponse(500, { Error: "Could not get event" });
+    return newResponse(500, {
+      error_type: "process_failed",
+      detail: "Could not get event.",
+    });
   }
 };
 
 const createEvent = async (userUuid, body) => {
+  const isUnique = await hasUniqueIdempotencyKey(body.idempotency_key);
+  if (!isUnique) {
+    return newResponse(404, {
+      error_Type: "duplicate_found",
+      detail: "An event with that idempotency key already exists.",
+    });
+  }
+
   const topicArn = await getTopicArn(body.event_type_id);
   if (!topicArn) {
-    return newResponse(500, { Error: "Invalid event type" });
+    return newResponse(404, {
+      error_Type: "data_not_found",
+      detail: "No event type matches given uuid",
+    });
   }
 
   try {
@@ -40,8 +55,22 @@ const createEvent = async (userUuid, body) => {
   }
 };
 
+const hasUniqueIdempotencyKey = async (idempotency_key) => {
+  const text = queries.hasUniqueIdempotencyKey;
+  const values = [idempotency_key];
+
+  try {
+    const response = await db.query(text, values);
+    const duplicates = response.rows;
+    return duplicates.length === 0;
+  } catch (error) {
+    console.log(error);
+    return;
+  }
+};
+
 const getTopicArn = async (eventTypeUuid) => {
-  const text = `SELECT sns_topic_arn FROM event_types WHERE uuid = $1`;
+  const text = queries.getTopicArn;
   const values = [eventTypeUuid];
 
   try {
@@ -72,11 +101,9 @@ const addEventToSNS = async (userUuid, payload, topicArn) => {
 
 const addEventToDb = async (userUuid, eventUuid, body) => {
   const { event_type_id, payload, idempotency_key } = body;
-  const eventTypeId = await serviceUuidToPK("event_types", event_type_id);
-  const userId = await serviceUuidToPK("users", userUuid);
-  const text = `INSERT INTO events (uuid, event_type_id, user_id, payload, idempotency_key)
-    VALUES ($1, $2, $3, $4, $5)
-    RETURNING *`;
+  const eventTypeId = await uuidToId("event_types", event_type_id);
+  const userId = await uuidToId("users", userUuid);
+  const text = queries.addEvent;
   const values = [
     eventUuid,
     eventTypeId,
@@ -97,11 +124,7 @@ const addEventToDb = async (userUuid, eventUuid, body) => {
 };
 
 const listEvents = async (userUuid) => {
-  const text = `SELECT events.uuid, event_types.uuid as event_type_id, users.uuid as user_id, payload, idempotency_key
-      FROM events 
-      JOIN event_types ON events.event_type_id = event_types.id
-      JOIN users ON events.user_id = users.id
-      WHERE users.uuid = $1`;
+  const text = queries.listEvents;
   const values = [userUuid];
 
   try {
@@ -110,15 +133,11 @@ const listEvents = async (userUuid) => {
     return newResponse(200, events);
   } catch (error) {
     console.error(error);
-    return newResponse(500, { Error: "Could not get events" });
+    return newResponse(500, {
+      error_type: "process_failed",
+      detail: "Could not get events.",
+    });
   }
-};
-
-const newResponse = (statusCode, body) => {
-  return {
-    statusCode,
-    body: JSON.stringify(body),
-  };
 };
 
 module.exports = {
