@@ -4,10 +4,10 @@ const sns = new AWS.SNS({ apiVersion: "2010-03-31" });
 
 const getEvent = async (eventUuid) => {
   const text = `SELECT events.uuid, event_types.uuid as event_type_id, users.uuid as user_id, payload, idempotency_key
-      FROM events 
-      JOIN event_types ON events.event_type_id = event_types.id
-      JOIN users ON events.user_id = users.id
-      WHERE events.uuid = $1`;
+    FROM events 
+    JOIN event_types ON events.event_type_id = event_types.id
+    JOIN users ON events.user_id = users.id
+    WHERE events.uuid = $1`;
   const values = [eventUuid];
 
   try {
@@ -25,20 +25,14 @@ const getEvent = async (eventUuid) => {
 };
 
 const createEvent = async (userUuid, body) => {
-  const newEvent = await addEventToDb(userUuid, body);
-
-  if (!newEvent) {
-    return newResponse(500, { Error: "Could not add event" });
-  }
-
-  const topic_arn = await getTopicArn(newEvent.event_type_id);
-
-  if (!topic_arn) {
-    return newResponse(500, { Error: "Could not add event" });
+  const topicArn = await getTopicArn(body.event_type_id);
+  if (!topicArn) {
+    return newResponse(500, { Error: "Invalid event type" });
   }
 
   try {
-    await addEventToSNS(newEvent, topic_arn);
+    const eventUuid = await addEventToSNS(userUuid, body.payload, topicArn);
+    const newEvent = await addEventToDb(userUuid, eventUuid, body);
     return newResponse(202, newEvent);
   } catch (error) {
     console.log(error);
@@ -46,9 +40,9 @@ const createEvent = async (userUuid, body) => {
   }
 };
 
-const getTopicArn = async (eventUuid) => {
+const getTopicArn = async (eventTypeUuid) => {
   const text = `SELECT sns_topic_arn FROM event_types WHERE uuid = $1`;
-  const values = [eventUuid];
+  const values = [eventTypeUuid];
 
   try {
     const response = await db.query(text, values);
@@ -60,48 +54,46 @@ const getTopicArn = async (eventUuid) => {
   }
 };
 
-const addEventToSNS = async (event, topic_arn) => {
+const addEventToSNS = async (userUuid, payload, topicArn) => {
   const params = {
-    TopicArn: topic_arn,
-    Message: JSON.stringify(event.payload),
+    TopicArn: topicArn,
+    Message: JSON.stringify(payload),
     MessageAttributes: {
       user_uuid: {
         DataType: "String",
-        StringValue: event.user_id,
+        StringValue: userUuid,
       },
     },
   };
 
-  await sns.publish(params).promise();
+  const eventData = await sns.publish(params).promise();
+  return eventData.MessageId;
 };
 
-const addEventToDb = async (userUuid, body) => {
+const addEventToDb = async (userUuid, eventUuid, body) => {
   const { event_type_id, payload, idempotency_key } = body;
   const eventTypeId = await serviceUuidToPK("event_types", event_type_id);
   const userId = await serviceUuidToPK("users", userUuid);
-  const text = `INSERT INTO events (event_type_id, user_id, payload, idempotency_key) VALUES ($1, $2, $3, $4) RETURNING *`;
+  const text = `INSERT INTO events (uuid, event_type_id, user_id, payload, idempotency_key)
+    VALUES ($1, $2, $3, $4, $5)
+    RETURNING *`;
   const values = [
+    eventUuid,
     eventTypeId,
     userId,
     JSON.stringify(payload),
     idempotency_key,
   ];
 
-  try {
-    const response = await db.query(text, values);
-    let event = response.rows[0];
-    event = {
-      event_type_id,
-      user_id: userUuid,
-      uuid: event.uuid,
-      payload: event.payload,
-      idempotency_key: event.idempotency_key,
-    };
-    return event;
-  } catch (error) {
-    console.log(error);
-    return;
-  }
+  const response = await db.query(text, values);
+  const event = response.rows[0];
+  return {
+    event_type_id,
+    user_id: userUuid,
+    uuid: event.uuid,
+    payload: event.payload,
+    idempotency_key: event.idempotency_key,
+  };
 };
 
 const listEvents = async (userUuid) => {

@@ -2,7 +2,7 @@
 const { getEvent, createEvent, listEvents } = require("./eventActions");
 
 exports.handler = async (event) => {
-  let { pathParameters, httpMethod, resource, body } = event;
+  let { pathParameters, httpMethod, body } = event;
   body = JSON.parse(body);
   const serviceUuid = pathParameters
     ? pathParameters.service_id
