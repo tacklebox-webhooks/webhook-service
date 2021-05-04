@@ -1,103 +1,93 @@
-const { db } = require("./db");
+const { db, queries } = require("./db");
+const { newResponse, uuidToId } = require("./utils");
 
-const serviceUuidToPK = async (uuid) => {
-  const text = "SELECT id FROM services WHERE uuid = $1";
-  const values = [uuid];
-
-  const response = await db.query(text, values);
-  let responseBody = response.rows[0];
-  return responseBody.id;
-};
-
-const createUser = async (name, serviceId) => {
-  let serviceIdPk;
-
-  try {
-    serviceIdPk = await serviceUuidToPK(serviceId);
-  } catch (error) {
-    console.error(error);
-    return newResponse(500, { Error: "Could not create user" });
+const createUser = async (name, serviceUuid) => {
+  if (!name) {
+    return newResponse(400, {
+      error_type: "missing_parameter",
+      detail: "'name' is required.",
+    });
   }
 
-  const text =
-    "INSERT INTO users(name, service_id) VALUES($1, $2) RETURNING uuid, name, created_at";
-  const values = [name, serviceIdPk];
+  const text = queries.createUser;
 
   try {
+    const serviceId = await uuidToId("services", serviceUuid);
+    const values = [name, serviceId];
     const response = await db.query(text, values);
-    let responseBody = response.rows[0];
-    return newResponse(201, responseBody);
+    const user = response.rows[0];
+    return newResponse(201, user);
   } catch (error) {
     console.error(error);
-    return newResponse(500, { Error: "Could not create user" });
+    return newResponse(500, {
+      error_type: "process_failed",
+      detail: "Could not create user.",
+    });
   }
 };
 
-const listUsers = async (serviceId) => {
-  const serviceIdPk = await serviceUuidToPK(serviceId);
-  const text =
-    "SELECT uuid, name, created_at FROM users WHERE deleted_at IS NULL AND service_id = $1";
-  const values = [serviceIdPk];
+const listUsers = async (serviceUuid) => {
+  const text = queries.listUsers;
+  const values = [serviceUuid];
 
   try {
     const response = await db.query(text, values);
-    let responseBody = response.rows;
-    return newResponse(200, responseBody);
+    const users = response.rows;
+    return newResponse(200, users);
   } catch (error) {
     console.error(error);
-    return newResponse(500, { Error: "Could not get users" });
+    return newResponse(500, {
+      error_type: "process_failed",
+      detail: "Could not get users.",
+    });
   }
 };
 
-const getUser = async (userId) => {
-  console.log("Getting user");
-
-  const text =
-    "SELECT uuid, name, created_at FROM users WHERE uuid = $1 AND deleted_at IS NULL";
-  const values = [userId];
+const getUser = async (userUuid) => {
+  const text = queries.getUser;
+  const values = [userUuid];
 
   try {
     const response = await db.query(text, values);
-    if (response.rows.length === 0) {
-      return newResponse(404, { Error: "User not found" });
-    } else {
-      let responseBody = response.rows[0];
-      return newResponse(200, responseBody);
+    const user = response.rows[0];
+
+    if (!user) {
+      return newResponse(404, {
+        error_type: "data_not_found",
+        detail: "No user matches given uuid.",
+      });
     }
+
+    return newResponse(200, user);
   } catch (error) {
     console.error(error);
-    return newResponse(500, { Error: "Could not get user" });
+    return newResponse(500, {
+      error_type: "process_failed",
+      detail: "Could not get user.",
+    });
   }
 };
 
-const deleteUser = async (userId) => {
-  const text =
-    "UPDATE users SET deleted_at = NOW() WHERE uuid = $1 AND deleted_at IS NULL RETURNING uuid";
-  const values = [userId];
+// const deleteUser = async (userUuid) => {
+//   const text = queries.deleteUser;
+//   const values = [userUuid];
 
-  try {
-    // all need to delete related subscriptions
-    const response = await db.query(text, values);
-    if (response.rows.length === 0) {
-      return newResponse(404, { Error: "User not found" });
-    } else {
-      return newResponse(204, { Success: "User was deleted" });
-    }
-  } catch (error) {
-    console.error(error);
-    return newResponse(500, { Error: "Could not delete user" });
-  }
-};
-
-const newResponse = (statusCode, body) => {
-  return {
-    statusCode,
-    body: JSON.stringify(body),
-  };
-};
+//   try {
+//     // all need to delete related subscriptions
+//     const response = await db.query(text, values);
+//     if (response.rows.length === 0) {
+//       return newResponse(404, { Error: "User not found" });
+//     } else {
+//       return newResponse(204, { Success: "User was deleted" });
+//     }
+//   } catch (error) {
+//     console.error(error);
+//     return newResponse(500, { Error: "Could not delete user" });
+//   }
+// };
 
 module.exports = {
-  deleteUser,
+  // deleteUser,
   getUser,
   createUser,
   listUsers,
