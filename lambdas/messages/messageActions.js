@@ -3,23 +3,14 @@ const AWS = require("aws-sdk");
 const sns = new AWS.SNS({ apiVersion: "2010-03-31" });
 
 const resendMessage = async (messageUuid, serviceUuid) => {
-  const message = await getMessageForSNS(messageUuid);
+  const message = await getMessageToResend(messageUuid);
   if (!message) {
     return newResponse(404, { Error: "Could not find message to resend" });
   }
 
-  let resend_arn = await getResendArn();
-  if (!resend_arn) {
-    resend_arn = await createResendArn(serviceUuid);
-
-    if (!resend_arn) {
-      return newResponse(500, { Error: "Could not resend message" });
-    }
-  }
-
-  const params = createParams(message, resend_arn);
-
   try {
+    const resend_arn = await getResendArn(serviceUuid);
+    const params = createParams(message, resend_arn);
     await sns.publish(params).promise();
     return newResponse(202, {});
   } catch (error) {
@@ -28,7 +19,7 @@ const resendMessage = async (messageUuid, serviceUuid) => {
   }
 };
 
-const getMessageForSNS = async (messageUuid) => {
+const getMessageToResend = async (messageUuid) => {
   const text = `SELECT messages.endpoint, events.payload
     FROM messages
     JOIN events ON messages.event_id = events.id
@@ -47,34 +38,26 @@ const getMessageForSNS = async (messageUuid) => {
   }
 };
 
-const getResendArn = async () => {
+const getResendArn = async (serviceUuid) => {
   const queryString =
     "SELECT sns_topic_arn FROM event_types WHERE name = 'test_manual_message'";
+  const response = await db.query(queryString);
+  let eventType = response.rows[0];
 
-  try {
-    const response = await db.query(queryString);
-    if (response.rows.length === 0) return;
-
-    const messageData = response.rows[0];
-    return messageData.sns_topic_arn;
-  } catch (error) {
-    console.log(error);
-    return;
+  if (!eventType) {
+    eventType = await createResendEventType(serviceUuid);
+    return eventType.sns_topic_arn;
   }
+
+  return eventType.sns_topic_arn;
 };
 
-const createResendArn = async (serviceUuid) => {
-  try {
-    const sns_topic_arn = await addResendToSNS(serviceUuid);
-    await addResendToDb(sns_topic_arn, serviceUuid);
-    return sns_topic_arn;
-  } catch (error) {
-    console.log(error);
-    return;
-  }
+const createResendEventType = async (serviceUuid) => {
+  const sns_topic_arn = await addResendTopicToSNS(serviceUuid);
+  return await addResendEventTypeToDb(sns_topic_arn, serviceUuid);
 };
 
-const addResendToSNS = async (serviceUuid) => {
+const addResendTopicToSNS = async (serviceUuid) => {
   const snsTopicName = `CaptainHook_${serviceUuid}_test_manual_message`;
   const HTTPSuccessFeedbackRoleArn =
     "arn:aws:iam::946221510390:role/SNSSuccessFeedback";
@@ -95,16 +78,20 @@ const addResendToSNS = async (serviceUuid) => {
   return topic.TopicArn;
 };
 
-const addResendToDb = async (sns_topic_arn, serviceUuid) => {
+const addResendEventTypeToDb = async (sns_topic_arn, serviceUuid) => {
   const serviceId = await serviceUuidToPK("services", serviceUuid);
 
   if (!serviceId) {
     throw new Error("Service Id not valid");
   }
 
-  const text = `INSERT INTO event_types (service_id, name, sns_topic_arn) VALUES ($1, $2, $3)`;
+  const text = `INSERT INTO event_types (service_id, name, sns_topic_arn)
+    VALUES ($1, $2, $3)
+    RETURNING service_id, name, sns_topic_arn, uuid`;
   const values = [serviceId, "test_manual_message", sns_topic_arn];
-  await db.query(text, values);
+  const response = await db.query(text, values);
+  const eventType = response.rows[0];
+  return eventType;
 };
 
 const createParams = (message, resend_arn) => {
