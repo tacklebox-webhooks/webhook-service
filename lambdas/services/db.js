@@ -13,4 +13,16 @@ const pool = new Pool({
   port,
 });
 
+const queries = {
+  createService:
+    "INSERT INTO services(name) VALUES($1) RETURNING uuid, name, created_at",
+  listServices:
+    "SELECT uuid, name, created_at FROM services WHERE deleted_at IS NULL",
+  getService:
+    "SELECT uuid, name, created_at FROM services WHERE uuid = $1 AND deleted_at IS NULL",
+  deleteService:
+    "UPDATE services SET deleted_at = NOW() WHERE uuid = $1 AND deleted_at IS NULL RETURNING uuid",
+};
+
 module.exports.db = pool;
+module.exports.queries = queries;
