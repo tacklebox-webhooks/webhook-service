@@ -1,78 +1,92 @@
-const { db } = require('./db');
+const { db, queries } = require("./db");
+const { newResponse } = require("./utils");
 
 const createService = async (name) => {
-  const text = 'INSERT INTO services(name) VALUES($1) RETURNING uuid, name, created_at';
+  if (!name) {
+    return newResponse(400, {
+      error_type: "invalid_parameter",
+      detail: "'name' is required.",
+    });
+  }
+
+  const text = queries.createService;
   const values = [name];
 
   try {
     const response = await db.query(text, values);
-    let responseBody = response.rows[0];
-    return newResponse(201, responseBody);
+    let service = response.rows[0];
+    return newResponse(201, service);
   } catch (error) {
     console.error(error);
-    return newResponse(500, { Error: 'Could not create service' });
+    return newResponse(500, {
+      error_type: "process_failed",
+      detail: "Could not create service.",
+    });
   }
 };
 
 const listServices = async () => {
-  const queryString = 'SELECT uuid, name, created_at FROM services WHERE deleted_at IS NULL';
+  const queryString = queries.listServices;
 
   try {
     const response = await db.query(queryString);
-    let responseBody = response.rows;
-    return newResponse(200, responseBody);
+    let services = response.rows;
+    return newResponse(200, services);
   } catch (error) {
     console.error(error);
-    return newResponse(500, { Error: 'Could not get services' });
+    return newResponse(500, {
+      error_type: "process_failed",
+      detail: "Could not get services.",
+    });
   }
 };
 
 const getService = async (serviceId) => {
-  const text = 'SELECT uuid, name, created_at FROM services WHERE uuid = $1 AND deleted_at IS NULL';
+  const text = queries.getService;
   const values = [serviceId];
 
   try {
     const response = await db.query(text, values);
-    if (response.rows.length === 0) {
-      return newResponse(404, { Error: 'Service not found'});
-    } else {
-      let responseBody = response.rows[0];
-      return newResponse(200, responseBody);
+    const service = response.rows[0];
+
+    if (!service) {
+      return newResponse(404, {
+        error_type: "data_not_found",
+        detail: "No service matches given uuid.",
+      });
     }
+
+    return newResponse(200, service);
   } catch (error) {
     console.error(error);
-    return newResponse(500, { Error: 'Could not get service' });
+    return newResponse(500, {
+      error_type: "process_failed",
+      detail: "Could not get service.",
+    });
   }
 };
 
-const deleteService = async (serviceId) => {
-  const text = "UPDATE services SET deleted_at = NOW() WHERE uuid = $1 AND deleted_at IS NULL RETURNING uuid";
-  const values = [serviceId];
+// const deleteService = async (serviceId) => {
+//   const text = queries.deleteService;
+//   const values = [serviceId];
 
-  try {
-    // all need to delete related topics
-    const response = await db.query(text, values);
-    if (response.rows.length === 0) {
-      return newResponse(404, { Error: 'Service not found'});
-    } else {
-      return newResponse(204, { Success: 'Service was deleted'});
-    }
-  } catch (error) {
-    console.error(error);
-    return newResponse(500, { Error: 'Could not delete service' });
-  }
-};
-
-const newResponse = (statusCode, body) => {
-  return {
-    statusCode,
-    body: JSON.stringify(body),
-  };
-};
+//   try {
+//     // all need to delete related topics
+//     const response = await db.query(text, values);
+//     if (response.rows.length === 0) {
+//       return newResponse(404, { Error: 'Service not found'});
+//     } else {
+//       return newResponse(204, { Success: 'Service was deleted'});
+//     }
+//   } catch (error) {
+//     console.error(error);
+//     return newResponse(500, { Error: 'Could not delete service' });
+//   }
+// };
 
 module.exports = {
-  deleteService,
+  // deleteService,
   getService,
   createService,
-  listServices
+  listServices,
 };

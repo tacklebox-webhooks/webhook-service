@@ -1,21 +1,28 @@
-const { db, serviceUuidToPK } = require("./db");
+const { db } = require("./db");
+const { newResponse } = require("./utils");
 const AWS = require("aws-sdk");
 const sns = new AWS.SNS({ apiVersion: "2010-03-31" });
 
 const resendMessage = async (messageUuid, serviceUuid) => {
-  const message = await getMessageToResend(messageUuid);
-  if (!message) {
-    return newResponse(404, { Error: "Could not find message to resend" });
-  }
-
   try {
+    const message = await getMessageToResend(messageUuid);
+    if (!message) {
+      return newResponse(404, {
+        error_type: "data_not_found",
+        detail: "No message matches given uuid.",
+      });
+    }
+
     const resend_arn = await getResendArn(serviceUuid);
     const params = createParams(message, resend_arn);
     await sns.publish(params).promise();
     return newResponse(202, {});
   } catch (error) {
     console.error(error);
-    return newResponse(500, { Error: "Could not resend message" });
+    return newResponse(500, {
+      error_type: "process_failed",
+      detail: "Could not resend message.",
+    });
   }
 };
 
@@ -26,72 +33,20 @@ const getMessageToResend = async (messageUuid) => {
     WHERE messages.uuid = $1`;
   const values = [messageUuid];
 
-  try {
-    const response = await db.query(text, values);
-    if (!response.rows) return;
-
-    const messageData = response.rows[0];
-    return messageData;
-  } catch (error) {
-    console.error(error);
-    return;
-  }
+  const response = await db.query(text, values);
+  const message = response.rows[0];
+  return message;
 };
 
 const getResendArn = async (serviceUuid) => {
   const queryString =
-    "SELECT sns_topic_arn FROM event_types WHERE name = 'test_manual_message'";
+    "SELECT sns_topic_arn FROM event_types WHERE name = 'manual_message'";
   const response = await db.query(queryString);
   let eventType = response.rows[0];
 
-  if (!eventType) {
-    eventType = await createResendEventType(serviceUuid);
+  if (eventType) {
     return eventType.sns_topic_arn;
   }
-
-  return eventType.sns_topic_arn;
-};
-
-const createResendEventType = async (serviceUuid) => {
-  const sns_topic_arn = await addResendTopicToSNS(serviceUuid);
-  return await addResendEventTypeToDb(sns_topic_arn, serviceUuid);
-};
-
-const addResendTopicToSNS = async (serviceUuid) => {
-  const snsTopicName = `CaptainHook_${serviceUuid}_test_manual_message`;
-  const HTTPSuccessFeedbackRoleArn =
-    "arn:aws:iam::946221510390:role/SNSSuccessFeedback";
-  const HTTPFailureFeedbackRoleArn =
-    "arn:aws:iam::946221510390:role/SNSFailureFeedback";
-  const HTTPSuccessFeedbackSampleRate = "100";
-
-  const snsParams = {
-    Name: snsTopicName,
-    Attributes: {
-      HTTPSuccessFeedbackRoleArn,
-      HTTPFailureFeedbackRoleArn,
-      HTTPSuccessFeedbackSampleRate,
-    },
-  };
-
-  const topic = await sns.createTopic(snsParams).promise();
-  return topic.TopicArn;
-};
-
-const addResendEventTypeToDb = async (sns_topic_arn, serviceUuid) => {
-  const serviceId = await serviceUuidToPK("services", serviceUuid);
-
-  if (!serviceId) {
-    throw new Error("Service Id not valid");
-  }
-
-  const text = `INSERT INTO event_types (service_id, name, sns_topic_arn)
-    VALUES ($1, $2, $3)
-    RETURNING service_id, name, sns_topic_arn, uuid`;
-  const values = [serviceId, "test_manual_message", sns_topic_arn];
-  const response = await db.query(text, values);
-  const eventType = response.rows[0];
-  return eventType;
 };
 
 const createParams = (message, resend_arn) => {
@@ -115,15 +70,22 @@ const getMessage = async (messageUuid) => {
 
   try {
     const response = await db.query(text, values);
-    if (response.rows.length === 0) {
-      return newResponse(404, { Error: "Message not found" });
+    const message = response.rows[0];
+
+    if (!message) {
+      return newResponse(404, {
+        error_type: "data_not_found",
+        detail: "No message matches given uuid.",
+      });
     }
 
-    let responseBody = response.rows[0];
-    return newResponse(200, responseBody);
+    return newResponse(200, message);
   } catch (error) {
     console.error(error);
-    return newResponse(500, { Error: "Could not get message" });
+    return newResponse(500, {
+      error_type: "process_failed",
+      detail: "Could not get message.",
+    });
   }
 };
 
@@ -141,15 +103,11 @@ const listMessages = async (userUuid) => {
     return newResponse(200, responseBody);
   } catch (error) {
     console.error(error);
-    return newResponse(500, { Error: "Could not get messages" });
+    return newResponse(500, {
+      error_type: "process_failed",
+      detail: "Could not get messages.",
+    });
   }
-};
-
-const newResponse = (statusCode, body) => {
-  return {
-    statusCode,
-    body: JSON.stringify(body),
-  };
 };
 
 module.exports = {

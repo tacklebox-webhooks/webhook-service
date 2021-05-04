@@ -1,39 +1,35 @@
 "use strict";
-const {
-  deleteUser,
-  getUser,
-  createUser,
-  listUsers,
-} = require("./serviceActions");
+const { getUser, createUser, listUsers } = require("./userActions");
+const { newResponse, isValidService } = require("./utils");
 
 exports.handler = async (event) => {
-  let {
-    pathParameters,
-    httpMethod,
-    body,
-    // headers
-  } = event;
+  let { pathParameters, httpMethod, body } = event;
   body = JSON.parse(body);
-  const serviceId = pathParameters ? pathParameters.service_id : undefined;
-  const userId = pathParameters ? pathParameters.user_id : undefined;
+  const userUuid = pathParameters ? pathParameters.user_id : pathParameters;
 
-  if (userId) {
+  const serviceUuid = pathParameters
+    ? pathParameters.service_id
+    : pathParameters;
+  if (!(await isValidService(serviceUuid))) {
+    return newResponse(404, {
+      error_Type: "data_not_found",
+      detail: "No service matches given uuid.",
+    });
+  }
+
+  if (userUuid) {
     switch (httpMethod) {
-      case "DELETE":
-        console.log("DELETE");
-        return await deleteUser(userId);
+      // case "DELETE":
+      //   return await deleteUser(userId);
       case "GET":
-        console.log("GET");
-        return await getUser(userId);
+        return await getUser(userUuid);
     }
   } else {
     switch (httpMethod) {
       case "POST":
-        console.log("POST");
-        return await createUser(body.name, serviceId);
+        return await createUser(body.name, serviceUuid);
       case "GET":
-        console.log("GET");
-        return await listUsers(serviceId);
+        return await listUsers(serviceUuid);
     }
   }
 };
