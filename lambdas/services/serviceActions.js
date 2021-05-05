@@ -1,5 +1,5 @@
 const { db, queries } = require("./db");
-const { newResponse } = require("./utils");
+const { newResponse, isValidUuid } = require("./utils");
 
 const createService = async (name) => {
   if (!name) {
@@ -42,6 +42,13 @@ const listServices = async () => {
 };
 
 const getService = async (serviceUuid) => {
+  if (!isValidUuid(serviceUuid)) {
+    return newResponse(404, {
+      error_Type: "data_not_found",
+      detail: "No service matches given uuid.",
+    });
+  }
+
   const text = queries.getService;
   const values = [serviceUuid];
 

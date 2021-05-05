@@ -17,6 +17,7 @@ exports.handler = async (event) => {
   const serviceUuid = pathParameters
     ? pathParameters.service_id
     : pathParameters;
+
   if (!(await isValidService(serviceUuid))) {
     return newResponse(404, {
       error_Type: "data_not_found",

@@ -4,13 +4,19 @@ const sns = new AWS.SNS({ apiVersion: "2010-03-31" });
 const cwlogs = new AWS.CloudWatchLogs({ apiVersion: "2014-03-28" });
 const lambda = new AWS.Lambda({ apiVersion: "2015-03-31" });
 const { db, queries } = require("./db");
-const { newResponse, uuidToId } = require("./utils");
+const { newResponse, uuidToId, isValidEventTypeName } = require("./utils");
 
 const createEventType = async (name, serviceUuid) => {
   if (!name) {
     return newResponse(400, {
       error_type: "missing_parameter",
       detail: "'name' is required.",
+    });
+  } else if (!isValidEventTypeName(name)) {
+    return newResponse(400, {
+      error_type: "invalid_parameter",
+      detail:
+        "'name' is limited to 50 characters, and can contain alphanumeric characters, hyphens, and underscores.",
     });
   }
 
