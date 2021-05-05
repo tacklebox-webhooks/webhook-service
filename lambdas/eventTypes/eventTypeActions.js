@@ -3,29 +3,19 @@ AWS.config.update({ region: "us-east-1" });
 const sns = new AWS.SNS({ apiVersion: "2010-03-31" });
 const cwlogs = new AWS.CloudWatchLogs({ apiVersion: "2014-03-28" });
 const lambda = new AWS.Lambda({ apiVersion: "2015-03-31" });
-const { db } = require("./db");
+const { db, queries } = require("./db");
+const { newResponse, uuidToId } = require("./utils");
 
-const serviceUuidToPK = async (uuid) => {
-  const text = "SELECT id FROM services WHERE uuid = $1";
-  const values = [uuid];
-
-  const response = await db.query(text, values);
-  let responseBody = response.rows[0];
-  return responseBody.id;
-};
-
-const createEventType = async (name, serviceId) => {
-  let serviceIdPk;
-
-  try {
-    serviceIdPk = await serviceUuidToPK(serviceId);
-  } catch (error) {
-    console.error(error);
-    return newResponse(500, { Error: "Could not create event type" });
+const createEventType = async (name, serviceUuid) => {
+  if (!name) {
+    return newResponse(400, {
+      error_type: "missing_parameter",
+      detail: "'name' is required.",
+    });
   }
 
-  const snsTopicName = `CaptainHook_${serviceId}_${name}`;
-
+  const serviceId = await uuidToId("services", serviceUuid);
+  const snsTopicName = `CaptainHook_${serviceUuid}_${name}`;
   const HTTPSuccessFeedbackRoleArn =
     "arn:aws:iam::946221510390:role/SNSSuccessFeedback";
   const HTTPFailureFeedbackRoleArn =
@@ -54,16 +44,23 @@ const createEventType = async (name, serviceId) => {
   }
 
   // Create log groups for SNS to use
+
+  // var logGroupName1 = `sns/us-east-2/169534841384/${Name}`;
+  // var createLogGroupParams1 = {
+  //   logGroupName: logGroupName1,
+  // };
+  // Dont delete below
   const region = "us-east-1";
   const accountId = "946221510390";
   const logGroupName = `sns/${region}/${accountId}/${snsTopicName}`;
   const logGroupNameFailure = `${logGroupName}/Failure`;
   const destinationArn = `arn:aws:lambda:${region}:${accountId}:function:CaptainHook_LogMessages`;
 
-  // Create "success" log group, add permissions and lambda trigger
   try {
     await cwlogs.createLogGroup({ logGroupName: logGroupName }).promise();
-
+    await cwlogs
+      .createLogGroup({ logGroupName: logGroupNameFailure })
+      .promise();
     // Add permissions to logMessage lambda
     const lambdaParams = {
       Action: "lambda:InvokeFunction",
@@ -76,7 +73,7 @@ const createEventType = async (name, serviceId) => {
     const lambdaResult = await lambda.addPermission(lambdaParams).promise();
     console.log(lambdaResult);
     // Tell log group to invoke lambda
-    const subscriptionFilterParams = {
+    const putSubscriptionFilterParams1 = {
       destinationArn,
       filterName: lambdaParams.StatementId,
       filterPattern: "",
@@ -84,7 +81,7 @@ const createEventType = async (name, serviceId) => {
     };
 
     const cwlogsResponse = await cwlogs
-      .putSubscriptionFilter(subscriptionFilterParams)
+      .putSubscriptionFilter(putSubscriptionFilterParams1)
       .promise();
 
     console.log(cwlogsResponse);
@@ -95,118 +92,151 @@ const createEventType = async (name, serviceId) => {
     );
   }
 
-  // Create "failure" log group, add permissions and lambda trigger
-  try {
-    await cwlogs
-      .createLogGroup({ logGroupName: logGroupNameFailure })
-      .promise();
-    const lambdaParams = {
-      Action: "lambda:InvokeFunction",
-      FunctionName: "CaptainHook_LogMessages",
-      Principal: `logs.${region}.amazonaws.com`,
-      SourceArn: `arn:aws:logs:${region}:${accountId}:log-group:${logGroupNameFailure}:*`,
-      StatementId: `${snsTopicName}FailureTrigger`,
-    };
+  // cwlogs.createLogGroup(createLogGroupParams1, function (err, data) {
+  //   if (err) {
+  //     console.error(
+  //       "Unable to send Create Log Group Request. Error JSON:",
+  //       JSON.stringify(err, null, 2)
+  //     );
+  //   } else {
+  //     const lambdaParams = {
+  //       Action: "lambda:InvokeFunction",
+  //       FunctionName: "logMessage",
+  //       Principal: "logs.us-east-2.amazonaws.com",
+  //       SourceArn: `arn:aws:logs:us-east-2:169534841384:log-group:sns/us-east-2/169534841384/${Name}:*`,
+  //       StatementId: `${Name}SuccessTrigger`,
+  //     };
 
-    const lambdaResult = await lambda.addPermission(lambdaParams).promise();
-    console.log(lambdaResult);
-    // Tell log group to invoke lambda
-    const subscriptionFilterParams = {
-      destinationArn,
-      filterName: lambdaParams.StatementId,
-      filterPattern: "",
-      logGroupName: logGroupNameFailure,
-    };
+  //     lambda.addPermission(lambdaParams, function (err, data) {
+  //       if (err) {
+  //         console.error(
+  //           "Unable to send Add Permission Request. Error JSON:",
+  //           JSON.stringify(err, null, 2)
+  //         );
+  //       } else {
+  //         var putSubscriptionFilterParams1 = {
+  //           destinationArn,
+  //           filterName: StatementId1,
+  //           filterPattern,
+  //           logGroupName: logGroupName1,
+  //         };
 
-    const cwlogsResponse = await cwlogs
-      .putSubscriptionFilter(subscriptionFilterParams)
-      .promise();
-
-    console.log(cwlogsResponse);
-  } catch (error) {
-    console.error(error);
-  }
-
-  const text =
-    "INSERT INTO event_types(name, service_id, sns_topic_arn) VALUES($1, $2, $3) RETURNING uuid, name, sns_topic_arn, created_at";
-  const values = [name, serviceIdPk, TopicArn];
+  //         cwlogs.putSubscriptionFilter(
+  //           putSubscriptionFilterParams1,
+  //           function (err, data) {
+  //             if (err) {
+  //               console.error(
+  //                 "Unable to send Put Subscription Filter Request. Error JSON:",
+  //                 JSON.stringify(err, null, 2)
+  //               );
+  //             } else {
+  //               console.log(
+  //                 "Results from Put Subscription Filter Request: ",
+  //                 JSON.stringify(data, null, 2)
+  //               );
+  //             }
+  //           }
+  //         );
+  //         console.log(
+  //           "Results from Add Permission Request: ",
+  //           JSON.stringify(data, null, 2)
+  //         );
+  //       }
+  //     });
+  //     console.log(
+  //       "Results from Create Log Group Request: ",
+  //       JSON.stringify(data, null, 2)
+  //     );
+  //   }
+  // });
+  const text = queries.createEventType;
+  const values = [name, serviceId, TopicArn];
 
   try {
     const response = await db.query(text, values);
-    let responseBody = response.rows[0];
-    return newResponse(201, responseBody);
+    const eventType = response.rows[0];
+    return newResponse(201, eventType);
   } catch (error) {
     console.error(error);
-    return newResponse(500, { Error: "Could not create event type" });
+    return newResponse(500, {
+      error_type: "process_failed",
+      detail: "Could not create event type.",
+    });
   }
 };
 
-const listEventTypes = async (serviceId) => {
-  const serviceIdPk = await serviceUuidToPK(serviceId);
-  const text =
-    "SELECT uuid, name, sns_topic_arn, created_at FROM event_types WHERE deleted_at IS NULL AND service_id = $1";
-  const values = [serviceIdPk];
+const listEventTypes = async (serviceUuid) => {
+  const text = queries.listEventTypes;
+  const values = [serviceUuid];
 
   try {
     const response = await db.query(text, values);
-    let responseBody = response.rows;
-    return newResponse(200, responseBody);
+    let eventTypes = response.rows;
+    return newResponse(200, eventTypes);
   } catch (error) {
     console.error(error);
-    return newResponse(500, { Error: "Could not get event types" });
+    return newResponse(500, {
+      error_type: "process_failed",
+      detail: "Could not get event types.",
+    });
   }
 };
 
 const getEventType = async (eventTypeId) => {
-  const text =
-    "SELECT uuid, name, sns_topic_arn, created_at FROM event_types WHERE uuid = $1 AND deleted_at IS NULL";
+  const text = queries.getEventType;
   const values = [eventTypeId];
 
   try {
     const response = await db.query(text, values);
-    if (response.rows.length === 0) {
-      return newResponse(404, { Error: "Event type not found" });
-    } else {
-      let responseBody = response.rows[0];
-      return newResponse(200, responseBody);
+    const eventType = response.rows[0];
+
+    if (!eventType) {
+      return newResponse(404, {
+        error_type: "data_not_found",
+        detail: "No event type matches given uuid.",
+      });
     }
+
+    return newResponse(200, eventType);
   } catch (error) {
     console.error(error);
-    return newResponse(500, { Error: "Could not get event type" });
+    return newResponse(500, {
+      error_type: "process_failed",
+      detail: "Could not get event type.",
+    });
   }
 };
 
 // TODO: Set matching subscriptions as deleted
-const deleteEventType = async (serviceId, eventTypeId) => {
-  const text =
-    "UPDATE event_types SET deleted_at = NOW() WHERE uuid = $1 AND deleted_at IS NULL RETURNING sns_topic_arn";
+const deleteEventType = async (serviceUuid, eventTypeId) => {
+  const text = queries.deleteEventType;
   const values = [eventTypeId];
 
   try {
     const response = await db.query(text, values);
+    const eventType = response.rows[0];
 
-    if (response.rows.length === 0) {
-      return newResponse(404, { Error: "Event type not found" });
-    } else {
-      const { sns_topic_arn } = response.rows[0]; // Pull event topic ARN from DB response
-      const snsParams = { TopicArn: sns_topic_arn };
-
-      // "This action is idempotent, so deleting a topic that does not exist does not result in an error."
-      const result = await sns.deleteTopic(snsParams).promise();
-
-      return newResponse(204, { Success: "Event type was deleted" });
+    if (!eventType) {
+      return newResponse(404, {
+        error_type: "data_not_found",
+        detail: "No event type matches given uuid.",
+      });
     }
+
+    const { sns_topic_arn } = eventType; // Pull event topic ARN from DB response
+    const snsParams = { TopicArn: sns_topic_arn };
+
+    // "This action is idempotent, so deleting a topic that does not exist does not result in an error."
+    const result = await sns.deleteTopic(snsParams).promise();
+
+    return newResponse(204, { Success: "Event type was deleted" });
   } catch (error) {
     console.error(error);
-    return newResponse(500, { Error: "Could not delete event type" });
+    return newResponse(500, {
+      error_type: "process_failed",
+      detail: "Could not delete event type.",
+    });
   }
-};
-
-const newResponse = (statusCode, body) => {
-  return {
-    statusCode,
-    body: JSON.stringify(body),
-  };
 };
 
 module.exports = {

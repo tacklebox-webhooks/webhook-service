@@ -1,40 +1,42 @@
 "use strict";
 const {
-  deleteEventType,
+  // deleteEventType,
   getEventType,
   createEventType,
   listEventTypes,
 } = require("./eventTypeActions");
+const { newResponse, isValidService } = require("./utils");
 
 exports.handler = async (event) => {
-  let {
-    pathParameters,
-    httpMethod,
-    body,
-    // headers
-  } = event;
-
+  let { pathParameters, httpMethod, body } = event;
   body = JSON.parse(body);
-  const serviceId = pathParameters ? pathParameters.service_id : undefined;
-  const eventTypeId = pathParameters ? pathParameters.event_type_id : undefined;
+  const eventTypeUuid = pathParameters
+    ? pathParameters.event_type_id
+    : pathParameters;
 
-  if (eventTypeId) {
+  const serviceUuid = pathParameters
+    ? pathParameters.service_id
+    : pathParameters;
+  if (!(await isValidService(serviceUuid))) {
+    return newResponse(404, {
+      error_Type: "data_not_found",
+      detail: "No service matches given uuid.",
+    });
+  }
+
+  if (eventTypeUuid) {
     switch (httpMethod) {
-      case "DELETE":
-        console.log("DELETE");
-        return await deleteEventType(serviceId, eventTypeId);
+      // case "DELETE":
+      //   return await deleteEventType(serviceUuid, eventTypeUuid);
       case "GET":
-        console.log("GET EVENT");
-        return await getEventType(eventTypeId);
+        return await getEventType(eventTypeUuid);
     }
   } else {
     switch (httpMethod) {
       case "POST":
-        console.log("POST");
-        return await createEventType(body.name, serviceId);
+        return await createEventType(body.name, serviceUuid);
       case "GET":
-        console.log("LIST EVENTS");
-        return await listEventTypes(serviceId);
+        return await listEventTypes(serviceUuid);
     }
   }
 };
