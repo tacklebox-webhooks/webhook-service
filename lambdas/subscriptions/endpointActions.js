@@ -29,12 +29,6 @@ const createEndpoint = async (userUuid, url, eventTypes) => {
   }
 
   const userId = await uuidToId("users", userUuid);
-  if (!userId) {
-    return newResponse(404, {
-      error_type: "data_not_found",
-      detail: "No user matches given uuid.",
-    });
-  }
 
   // Create endpoint in DB
 

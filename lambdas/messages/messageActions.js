@@ -1,4 +1,4 @@
-const { db } = require("./db");
+const { db, queries } = require("./db");
 const { newResponse } = require("./utils");
 const AWS = require("aws-sdk");
 const sns = new AWS.SNS({ apiVersion: "2010-03-31" });
@@ -27,10 +27,7 @@ const resendMessage = async (messageUuid, serviceUuid) => {
 };
 
 const getMessageToResend = async (messageUuid) => {
-  const text = `SELECT messages.endpoint, events.payload
-    FROM messages
-    JOIN events ON messages.event_id = events.id
-    WHERE messages.uuid = $1`;
+  const text = queries.getMessageToResend;
   const values = [messageUuid];
 
   const response = await db.query(text, values);
@@ -39,8 +36,7 @@ const getMessageToResend = async (messageUuid) => {
 };
 
 const getResendArn = async (serviceUuid) => {
-  const queryString =
-    "SELECT sns_topic_arn FROM event_types WHERE name = 'manual_message'";
+  const queryString = queries.getResendArn;
   const response = await db.query(queryString);
   let eventType = response.rows[0];
 
@@ -64,8 +60,7 @@ const createParams = (message, resend_arn) => {
 };
 
 const getMessage = async (messageUuid) => {
-  const text = `SELECT uuid, event_id, endpoint, delivery_attempts
-    FROM messages WHERE uuid = $1`;
+  const text = queries.getMessage;
   const values = [messageUuid];
 
   try {
@@ -90,11 +85,7 @@ const getMessage = async (messageUuid) => {
 };
 
 const listMessages = async (userUuid) => {
-  const text = `SELECT messages.uuid, event_id, endpoint, delivery_attempts, delivered_at
-    FROM messages
-    JOIN events ON messages.event_id = events.id
-    JOIN users ON events.user_id = users.id
-    WHERE users.uuid = $1`;
+  const text = queries.listMessages;
   const values = [userUuid];
 
   try {
