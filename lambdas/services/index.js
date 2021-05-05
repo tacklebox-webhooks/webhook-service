@@ -4,14 +4,16 @@ const { getService, createService, listServices } = require("./serviceActions");
 exports.handler = async (event) => {
   let { pathParameters, httpMethod, body } = event;
   body = JSON.parse(body);
-  const serviceId = pathParameters ? pathParameters.service_id : pathParameters;
+  const serviceUuid = pathParameters
+    ? pathParameters.service_id
+    : pathParameters;
 
-  if (serviceId) {
+  if (serviceUuid) {
     switch (httpMethod) {
       // case 'DELETE':
       //   return await deleteService(serviceId);
       case "GET":
-        return await getService(serviceId);
+        return await getService(serviceUuid);
     }
   } else {
     switch (httpMethod) {

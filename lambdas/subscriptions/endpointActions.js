@@ -1,19 +1,11 @@
 const AWS = require("aws-sdk");
 AWS.config.update({ region: "us-east-1" });
 const sns = new AWS.SNS({ apiVersion: "2010-03-31" });
-const { db } = require("./db");
-
-const userUuidToPk = async (uuid) => {
-  const text = "SELECT id FROM users WHERE uuid = $1";
-  const values = [uuid];
-
-  const response = await db.query(text, values);
-  let responseBody = response.rows[0];
-  return responseBody.id;
-};
+const { db, queries } = require("./db");
+const { uuidToId, newResponse } = require("./utils");
 
 const getEventTypeInfo = async (uuid) => {
-  const text = "SELECT id, sns_topic_arn FROM event_types WHERE uuid = $1";
+  const text = queries.getEventTypeInfo;
   const values = [uuid];
 
   const response = await db.query(text, values);
@@ -21,38 +13,39 @@ const getEventTypeInfo = async (uuid) => {
   return responseBody;
 };
 
-const saveEndpointToDb = async (userId, url) => {
-  const text =
-    "INSERT INTO endpoints(user_id, url) VALUES($1, $2) RETURNING id, uuid, url, created_at";
-  const values = [userId, url];
+const saveEndpointToDb = async (userUuid, url) => {
+  const text = queries.saveEndpointToDb;
+  const values = [userUuid, url];
   const response = await db.query(text, values);
   return response.rows[0];
 };
 
-const createEndpoint = async (userId, url, eventTypes) => {
-  let userIdPk;
-
-  try {
-    userIdPk = await userUuidToPk(userId);
-  } catch (error) {
-    console.error(error);
-    return newResponse(500, { Error: "Could not create endpoint" });
+const createEndpoint = async (userUuid, url, eventTypes) => {
+  if (!eventTypes || eventTypes.length === 0 || !url) {
+    return newResponse(400, {
+      error_type: "missing_parameter",
+      detail: "'url' and a non-empty 'eventTypes' list are required.",
+    });
   }
+
+  const userId = await uuidToId("users", userUuid);
 
   // Create endpoint in DB
 
   let endpoint;
 
   try {
-    const text =
-      "INSERT INTO endpoints(user_id, url) VALUES($1, $2) RETURNING id, uuid, url, created_at";
-    const values = [userIdPk, url];
+    const text = queries.saveEndpointToDb;
+    const values = [userId, url];
     const response = await db.query(text, values);
     endpoint = response.rows[0];
-    // endpoint = await saveEndpointToDb(userIdPk, url);
+    // endpoint = await saveEndpointToDb(userId, url);
   } catch (error) {
     console.error(error);
-    return newResponse(500, { Error: "Could not create endpoint" });
+    return newResponse(500, {
+      error_type: "process_failed",
+      detail: "Could not create subscription.",
+    });
   }
 
   // Subscribe endpoint to each specified event type
@@ -67,7 +60,7 @@ const createEndpoint = async (userId, url, eventTypes) => {
       console.error(error);
       continue;
     }
-    const FilterPolicy = JSON.stringify({ user_uuid: [userId] });
+    const FilterPolicy = JSON.stringify({ user_uuid: [userUuid] });
 
     const snsAttributes = {
       RawMessageDelivery: "true",
@@ -87,8 +80,7 @@ const createEndpoint = async (userId, url, eventTypes) => {
       const subscription = await sns.subscribe(snsParams).promise();
       console.log(subscription);
 
-      const query =
-        "INSERT INTO subscriptions(endpoint_id, event_type_id, subscription_arn VALUES($1, $2, $3) RETURNING uuid";
+      const query = queries.saveSubscriptionToDb;
       const queryValues = [
         endpoint.id,
         eventTypeInfo.id,
@@ -107,11 +99,9 @@ const createEndpoint = async (userId, url, eventTypes) => {
   return newResponse(201, endpoint);
 };
 
-const listEndpoints = async (userId) => {
-  const userIdPk = await userUuidToPk(userId);
-  const text =
-    "SELECT uuid, url, created_at FROM endpoints WHERE deleted_at IS NULL AND user_id = $1";
-  const values = [userIdPk];
+const listEndpoints = async (userUuid) => {
+  const text = queries.listEndpoints;
+  const values = [userUuid];
 
   try {
     const response = await db.query(text, values);
@@ -119,56 +109,64 @@ const listEndpoints = async (userId) => {
     return newResponse(200, responseBody);
   } catch (error) {
     console.error(error);
-    return newResponse(500, { Error: "Could not get event types" });
+    return newResponse(500, {
+      error_type: "process_failed",
+      detail: "Could not get subscriptions.",
+    });
   }
 };
 
-const getEndpoint = async (endpointId) => {
-  const text =
-    "SELECT uuid, url, created_at FROM endpoints WHERE deleted_at IS NULL AND uuid = $1";
-  const values = [endpointId];
+const getEndpoint = async (endpointUuid) => {
+  const text = queries.getEndpoint;
+  const values = [endpointUuid];
 
   try {
     const response = await db.query(text, values);
-    if (response.rows.length === 0) {
-      return newResponse(404, { Error: "Event type not found" });
-    } else {
-      let responseBody = response.rows[0];
-      return newResponse(200, responseBody);
+    const endpoint = response.rows[0];
+
+    if (!endpoint) {
+      return newResponse(404, {
+        error_type: "data_not_found",
+        detail: "No subscription matches given uuid.",
+      });
     }
+
+    return newResponse(200, endpoint);
   } catch (error) {
     console.error(error);
-    return newResponse(500, { Error: "Could not get event type" });
+    return newResponse(500, {
+      error_type: "process_failed",
+      detail: "Could not get subscription.",
+    });
   }
 };
 
 // TODO: Set matching subscriptions as deleted
-const deleteEndpoint = async (endpointId) => {
+const deleteEndpoint = async (endpointUuid) => {
   // const text =
   // "UPDATE endpoints SET deleted_at = NOW() WHERE uuid = $1 AND deleted_at IS NULL RETURNING sns_topic_arn";
 
-  const text = "DELETE FROM endpoints WHERE uuid = $1 RETURNING uuid";
-  const values = [endpointId];
+  const text = queries.deleteEndpoint;
+  const values = [endpointUuid];
 
   try {
     const response = await db.query(text, values);
-    console.log(response);
+
     if (response.rows.length === 0) {
-      return newResponse(404, { Error: "Endpoint not found" });
-    } else {
-      return newResponse(204, {});
+      return newResponse(404, {
+        error_type: "data_not_found",
+        detail: "No subscription matches given uuid.",
+      });
     }
+
+    return newResponse(204, {});
   } catch (error) {
     console.error(error);
-    return newResponse(500, { Error: "Could not delete event type" });
+    return newResponse(500, {
+      error_type: "process_failed",
+      detail: "Could not delete subscription.",
+    });
   }
-};
-
-const newResponse = (statusCode, body) => {
-  return {
-    statusCode,
-    body: JSON.stringify(body),
-  };
 };
 
 module.exports = {

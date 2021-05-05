@@ -41,9 +41,9 @@ const listServices = async () => {
   }
 };
 
-const getService = async (serviceId) => {
+const getService = async (serviceUuid) => {
   const text = queries.getService;
-  const values = [serviceId];
+  const values = [serviceUuid];
 
   try {
     const response = await db.query(text, values);
@@ -66,9 +66,9 @@ const getService = async (serviceId) => {
   }
 };
 
-// const deleteService = async (serviceId) => {
+// const deleteService = async (serviceUuid) => {
 //   const text = queries.deleteService;
-//   const values = [serviceId];
+//   const values = [serviceUuid];
 
 //   try {
 //     // all need to delete related topics

@@ -29,6 +29,13 @@ const getEvent = async (eventUuid) => {
 };
 
 const createEvent = async (userUuid, body) => {
+  if (!body.event_type_id || !body.payload) {
+    return newResponse(400, {
+      error_type: "missing_parameter",
+      detail: "'event_type_id' and 'payload' are both required.",
+    });
+  }
+
   const isUnique = await hasUniqueIdempotencyKey(body.idempotency_key);
   if (!isUnique) {
     return newResponse(404, {
@@ -56,6 +63,8 @@ const createEvent = async (userUuid, body) => {
 };
 
 const hasUniqueIdempotencyKey = async (idempotency_key) => {
+  if (!idempotency_key) return true;
+
   const text = queries.hasUniqueIdempotencyKey;
   const values = [idempotency_key];
 
