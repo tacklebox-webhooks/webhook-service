@@ -1,5 +1,7 @@
 const { db } = require("./db");
 
+const VALID_UUID = /^[A-F\d]{8}-[A-F\d]{4}-4[A-F\d]{3}-[89AB][A-F\d]{3}-[A-F\d]{12}$/i;
+
 const newResponse = (statusCode, body) => {
   return {
     statusCode,
@@ -22,6 +24,10 @@ const uuidToId = async (table, uuid) => {
 };
 
 const isValidService = async (serviceUuid) => {
+  if (!VALID_UUID.test(serviceUuid)) {
+    return false;
+  }
+
   const text = `SELECT uuid FROM services WHERE uuid = $1`;
   const values = [serviceUuid];
   const response = await db.query(text, values);

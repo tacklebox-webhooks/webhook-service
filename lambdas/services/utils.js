@@ -5,4 +5,11 @@ const newResponse = (statusCode, body) => {
   };
 };
 
+const isValidUuid = (uuid) => {
+  const uuidV4Regex = /^[A-F\d]{8}-[A-F\d]{4}-4[A-F\d]{3}-[89AB][A-F\d]{3}-[A-F\d]{12}$/i;
+
+  return uuidV4Regex.test(uuid);
+};
+
 module.exports.newResponse = newResponse;
+module.exports.isValidUuid = isValidUuid;
