@@ -43,24 +43,16 @@ const createEventType = async (name, serviceUuid) => {
     console.error(error);
   }
 
-  // Create log groups for SNS to use
-
-  // var logGroupName1 = `sns/us-east-2/169534841384/${Name}`;
-  // var createLogGroupParams1 = {
-  //   logGroupName: logGroupName1,
-  // };
-  // Dont delete below
   const region = "us-east-1";
   const accountId = "946221510390";
   const logGroupName = `sns/${region}/${accountId}/${snsTopicName}`;
   const logGroupNameFailure = `${logGroupName}/Failure`;
   const destinationArn = `arn:aws:lambda:${region}:${accountId}:function:CaptainHook_LogMessages`;
 
+  // Create "success" log group, add permissions and lambda trigger
   try {
     await cwlogs.createLogGroup({ logGroupName: logGroupName }).promise();
-    await cwlogs
-      .createLogGroup({ logGroupName: logGroupNameFailure })
-      .promise();
+
     // Add permissions to logMessage lambda
     const lambdaParams = {
       Action: "lambda:InvokeFunction",
@@ -73,7 +65,7 @@ const createEventType = async (name, serviceUuid) => {
     const lambdaResult = await lambda.addPermission(lambdaParams).promise();
     console.log(lambdaResult);
     // Tell log group to invoke lambda
-    const putSubscriptionFilterParams1 = {
+    const subscriptionFilterParams = {
       destinationArn,
       filterName: lambdaParams.StatementId,
       filterPattern: "",
@@ -81,7 +73,7 @@ const createEventType = async (name, serviceUuid) => {
     };
 
     const cwlogsResponse = await cwlogs
-      .putSubscriptionFilter(putSubscriptionFilterParams1)
+      .putSubscriptionFilter(subscriptionFilterParams)
       .promise();
 
     console.log(cwlogsResponse);
@@ -92,63 +84,38 @@ const createEventType = async (name, serviceUuid) => {
     );
   }
 
-  // cwlogs.createLogGroup(createLogGroupParams1, function (err, data) {
-  //   if (err) {
-  //     console.error(
-  //       "Unable to send Create Log Group Request. Error JSON:",
-  //       JSON.stringify(err, null, 2)
-  //     );
-  //   } else {
-  //     const lambdaParams = {
-  //       Action: "lambda:InvokeFunction",
-  //       FunctionName: "logMessage",
-  //       Principal: "logs.us-east-2.amazonaws.com",
-  //       SourceArn: `arn:aws:logs:us-east-2:169534841384:log-group:sns/us-east-2/169534841384/${Name}:*`,
-  //       StatementId: `${Name}SuccessTrigger`,
-  //     };
+  // Create "failure" log group, add permissions and lambda trigger
+  try {
+    await cwlogs
+      .createLogGroup({ logGroupName: logGroupNameFailure })
+      .promise();
+    const lambdaParams = {
+      Action: "lambda:InvokeFunction",
+      FunctionName: "CaptainHook_LogMessages",
+      Principal: `logs.${region}.amazonaws.com`,
+      SourceArn: `arn:aws:logs:${region}:${accountId}:log-group:${logGroupNameFailure}:*`,
+      StatementId: `${snsTopicName}FailureTrigger`,
+    };
 
-  //     lambda.addPermission(lambdaParams, function (err, data) {
-  //       if (err) {
-  //         console.error(
-  //           "Unable to send Add Permission Request. Error JSON:",
-  //           JSON.stringify(err, null, 2)
-  //         );
-  //       } else {
-  //         var putSubscriptionFilterParams1 = {
-  //           destinationArn,
-  //           filterName: StatementId1,
-  //           filterPattern,
-  //           logGroupName: logGroupName1,
-  //         };
+    const lambdaResult = await lambda.addPermission(lambdaParams).promise();
+    console.log(lambdaResult);
+    // Tell log group to invoke lambda
+    const subscriptionFilterParams = {
+      destinationArn,
+      filterName: lambdaParams.StatementId,
+      filterPattern: "",
+      logGroupName: logGroupNameFailure,
+    };
 
-  //         cwlogs.putSubscriptionFilter(
-  //           putSubscriptionFilterParams1,
-  //           function (err, data) {
-  //             if (err) {
-  //               console.error(
-  //                 "Unable to send Put Subscription Filter Request. Error JSON:",
-  //                 JSON.stringify(err, null, 2)
-  //               );
-  //             } else {
-  //               console.log(
-  //                 "Results from Put Subscription Filter Request: ",
-  //                 JSON.stringify(data, null, 2)
-  //               );
-  //             }
-  //           }
-  //         );
-  //         console.log(
-  //           "Results from Add Permission Request: ",
-  //           JSON.stringify(data, null, 2)
-  //         );
-  //       }
-  //     });
-  //     console.log(
-  //       "Results from Create Log Group Request: ",
-  //       JSON.stringify(data, null, 2)
-  //     );
-  //   }
-  // });
+    const cwlogsResponse = await cwlogs
+      .putSubscriptionFilter(subscriptionFilterParams)
+      .promise();
+
+    console.log(cwlogsResponse);
+  } catch (error) {
+    console.error(error);
+  }
+
   const text = queries.createEventType;
   const values = [name, serviceId, TopicArn];
 
