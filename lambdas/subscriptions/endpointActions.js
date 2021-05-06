@@ -4,20 +4,13 @@ const sns = new AWS.SNS({ apiVersion: "2010-03-31" });
 const { db, queries } = require("./db");
 const { uuidToId, newResponse } = require("./utils");
 
-const getEventTypeInfo = async (uuid) => {
-  const text = queries.getEventTypeInfo;
-  const values = [uuid];
+const getEventTypeInfo = async (name) => {
+  const text = queries.getEventTypeInfoFromName;
+  const values = [name];
 
   const response = await db.query(text, values);
   let responseBody = response.rows[0];
   return responseBody;
-};
-
-const saveEndpointToDb = async (userUuid, url) => {
-  const text = queries.saveEndpointToDb;
-  const values = [userUuid, url];
-  const response = await db.query(text, values);
-  return response.rows[0];
 };
 
 const createEndpoint = async (userUuid, url, eventTypes) => {
@@ -39,7 +32,7 @@ const createEndpoint = async (userUuid, url, eventTypes) => {
     const values = [userId, url];
     const response = await db.query(text, values);
     endpoint = response.rows[0];
-    // endpoint = await saveEndpointToDb(userId, url);
+    endpoint.eventTypes = [];
   } catch (error) {
     console.error(error);
     return newResponse(500, {
@@ -50,11 +43,11 @@ const createEndpoint = async (userUuid, url, eventTypes) => {
 
   // Subscribe endpoint to each specified event type
   for (let i = 0; i < eventTypes.length; i += 1) {
-    let eventTypeUuid = eventTypes[i];
+    let eventTypeName = eventTypes[i];
     let eventTypeInfo;
 
     try {
-      const response = await getEventTypeInfo(eventTypeUuid);
+      const response = await getEventTypeInfo(eventTypeName);
       eventTypeInfo = response;
     } catch (error) {
       console.error(error);
@@ -88,6 +81,7 @@ const createEndpoint = async (userUuid, url, eventTypes) => {
       ];
 
       const subResponse = await db.query(query, queryValues);
+      endpoint.eventTypes.push(eventTypeName);
       const sub = subResponse.rows[0];
       console.log(sub);
     } catch (error) {
@@ -96,7 +90,8 @@ const createEndpoint = async (userUuid, url, eventTypes) => {
     }
   }
 
-  return newResponse(201, endpoint);
+  const { id, ...endpointCopy } = endpoint;
+  return newResponse(201, endpointCopy);
 };
 
 const listEndpoints = async (userUuid) => {

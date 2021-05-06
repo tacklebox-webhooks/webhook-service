@@ -14,7 +14,8 @@ const pool = new Pool({
 });
 
 const queries = {
-  getEventTypeInfo: "SELECT id, sns_topic_arn FROM event_types WHERE uuid = $1",
+  getEventTypeInfoFromName:
+    "SELECT id, sns_topic_arn FROM event_types WHERE name = $1",
   saveEndpointToDb:
     "INSERT INTO endpoints(user_id, url) VALUES($1, $2) RETURNING id, uuid, url, created_at",
   saveSubscriptionToDb:
