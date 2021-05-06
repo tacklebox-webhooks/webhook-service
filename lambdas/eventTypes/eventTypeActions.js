@@ -27,6 +27,20 @@ const createEventType = async (name, serviceUuid) => {
   const HTTPFailureFeedbackRoleArn =
     "arn:aws:iam::946221510390:role/SNSFailureFeedback";
   const HTTPSuccessFeedbackSampleRate = "100";
+  const DeliveryPolicy = {
+    http: {
+      defaultHealthyRetryPolicy: {
+        minDelayTarget: 5,
+        maxDelayTarget: 1200,
+        numRetries: 10,
+        numMaxDelayRetries: 0,
+        numNoDelayRetries: 0,
+        numMinDelayRetries: 0,
+        backoffFunction: "exponential",
+      },
+      disableSubscriptionOverrides: true,
+    },
+  };
 
   const snsParams = {
     Name: snsTopicName,
@@ -34,6 +48,7 @@ const createEventType = async (name, serviceUuid) => {
       HTTPSuccessFeedbackRoleArn,
       HTTPFailureFeedbackRoleArn,
       HTTPSuccessFeedbackSampleRate,
+      DeliveryPolicy: JSON.stringify(DeliveryPolicy),
     },
   };
 
@@ -170,7 +185,19 @@ const getEventType = async (eventTypeId) => {
       });
     }
 
-    return newResponse(200, eventType);
+    console.log("Here");
+    const topic = await sns
+      .getTopicAttributes({
+        TopicArn: eventType.sns_topic_arn,
+      })
+      .promise();
+
+    eventType.DeliveryPolicy = JSON.parse(
+      topic.Attributes.EffectiveDeliveryPolicy
+    );
+
+    const { sns_topic_arn, ...formattedEventType } = eventType;
+    return newResponse(200, formattedEventType);
   } catch (error) {
     console.error(error);
     return newResponse(500, {
