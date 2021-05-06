@@ -16,7 +16,7 @@ const pool = new Pool({
 const queries = {
   createEventType:
     "INSERT INTO event_types(name, service_id, sns_topic_arn) VALUES($1, $2, $3) RETURNING uuid, name, sns_topic_arn, created_at",
-  listEventTypes: `SELECT event_types.uuid, event_types.name, sns_topic_arn, event_types.created_at
+  listEventTypes: `SELECT event_types.uuid, event_types.name, event_types.created_at
     FROM event_types
     JOIN services ON event_types.service_id = services.id
     WHERE services.uuid = $1 AND event_types.deleted_at IS NULL`,
