@@ -45,7 +45,18 @@ const isValidUser = async (userUuid) => {
   return response.rows.length > 0;
 };
 
+const getEventTypeInfo = async (name) => {
+  const text =
+    "SELECT id, uuid, sns_topic_arn FROM event_types WHERE name = $1";
+  const values = [name];
+
+  const response = await db.query(text, values);
+  let responseBody = response.rows[0];
+  return responseBody;
+};
+
 module.exports.newResponse = newResponse;
 module.exports.isValidService = isValidService;
 module.exports.isValidUser = isValidUser;
 module.exports.uuidToId = uuidToId;
+module.exports.getEventTypeInfo = getEventTypeInfo;
