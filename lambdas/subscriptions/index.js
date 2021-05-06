@@ -1,9 +1,10 @@
 "use strict";
 const {
+  listEndpoints,
+  createEndpoint,
   // deleteEndpoint,
   getEndpoint,
-  createEndpoint,
-  listEndpoints,
+  updateEndpoint,
 } = require("./endpointActions");
 const { newResponse, isValidService, isValidUser } = require("./utils");
 
@@ -39,6 +40,8 @@ exports.handler = async (event) => {
       //   return await deleteEndpoint(endpointId);
       case "GET":
         return await getEndpoint(endpointUuid);
+      case "PUT":
+        return await updateEndpoint(endpointUuid, userUuid, body.event_types);
     }
   } else {
     switch (httpMethod) {
