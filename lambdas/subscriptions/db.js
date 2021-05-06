@@ -18,13 +18,16 @@ const queries = {
   saveEndpointToDb:
     "INSERT INTO endpoints(user_id, url) VALUES($1, $2) RETURNING id, uuid, url, created_at",
   saveSubscriptionToDb:
-    "INSERT INTO subscriptions(endpoint_id, event_type_id, subscription_arn VALUES($1, $2, $3) RETURNING uuid",
-  listEndpoints: `SELECT endpoints.uuid, url, endpoints.created_at
-    FROM endpoints
+    "INSERT INTO subscriptions(endpoint_id, event_type_id, subscription_arn) VALUES($1, $2, $3) RETURNING uuid",
+  listEndpoints: `SELECT endpoints.uuid, url, array_agg(event_types.name) AS event_types, endpoints.created_at
+    FROM subscriptions
+    JOIN endpoints ON subscriptions.endpoint_id = endpoints.id
+    JOIN event_types ON subscriptions.event_type_id = event_types.id
     JOIN users ON endpoints.user_id = users.id
-    WHERE users.uuid = $1 AND endpoints.deleted_at IS NULL`,
+    WHERE users.uuid = $1
+    GROUP BY endpoints.id`,
   getEndpoint:
-    "SELECT uuid, url, created_at FROM endpoints WHERE deleted_at IS NULL AND uuid = $1",
+    "SELECT endpoints.uuid, url, array_agg(event_types.name) AS event_types, endpoints.created_at FROM subscriptions JOIN endpoints ON subscriptions.endpoint_id = endpoints.id JOIN event_types ON subscriptions.event_type_id = event_types.id WHERE endpoints.uuid = $1 GROUP BY endpoints.id",
   deleteEndpoint: "DELETE FROM endpoints WHERE uuid = $1 RETURNING uuid",
 };
 
