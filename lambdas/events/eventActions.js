@@ -1,5 +1,5 @@
 const { db, queries } = require("./db");
-const { newResponse, uuidToId } = require("./utils");
+const { newResponse, uuidToId, getEventTypeInfo } = require("./utils");
 const AWS = require("aws-sdk");
 const sns = new AWS.SNS({ apiVersion: "2010-03-31" });
 
@@ -28,28 +28,47 @@ const getEvent = async (eventUuid) => {
   }
 };
 
-const createEvent = async (userUuid, body) => {
-  if (!body.event_type_id || !body.payload) {
+const createEvent = async (serviceUuid, userUuid, body) => {
+  if (!body.event_type || !body.payload) {
     return newResponse(400, {
       error_type: "missing_parameter",
-      detail: "'event_type_id' and 'payload' are both required.",
+      detail: "'event_type' and 'payload' are both required.",
     });
   }
 
-  const isUnique = await hasUniqueIdempotencyKey(body.idempotency_key);
-  if (!isUnique) {
-    return newResponse(404, {
-      error_Type: "duplicate_found",
-      detail: "An event with that idempotency key already exists.",
-    });
+  try {
+    const isUnique = await hasUniqueIdempotencyKey(body.idempotency_key);
+    if (!isUnique) {
+      return newResponse(404, {
+        error_Type: "duplicate_found",
+        detail: "An event with that idempotency key already exists.",
+      });
+    }
+  } catch (error) {
+    console.error(error);
+    return newResponse(500, { Error: "Could not add event" });
   }
 
-  const topicArn = await getTopicArn(body.event_type_id);
-  if (!topicArn) {
-    return newResponse(404, {
-      error_Type: "data_not_found",
-      detail: "No event type matches given uuid",
-    });
+  let serviceId;
+  try {
+    serviceId = await uuidToId("services", serviceUuid);
+  } catch (error) {
+    console.error(error);
+    return newResponse(500, { Error: "Could not add event" });
+  }
+
+  let topicArn;
+  try {
+    topicArn = await getTopicArn(serviceId, body.event_type);
+    if (!topicArn) {
+      return newResponse(404, {
+        error_Type: "data_not_found",
+        detail: "No event type matches given name",
+      });
+    }
+  } catch (error) {
+    console.error(error);
+    return newResponse(500, { Error: "Could not add event" });
   }
 
   try {
@@ -57,7 +76,7 @@ const createEvent = async (userUuid, body) => {
     const newEvent = await addEventToDb(userUuid, eventUuid, body);
     return newResponse(202, newEvent);
   } catch (error) {
-    console.log(error);
+    console.error(error);
     return newResponse(500, { Error: "Could not add event" });
   }
 };
@@ -73,21 +92,21 @@ const hasUniqueIdempotencyKey = async (idempotency_key) => {
     const duplicates = response.rows;
     return duplicates.length === 0;
   } catch (error) {
-    console.log(error);
+    console.error(error);
     return;
   }
 };
 
-const getTopicArn = async (eventTypeUuid) => {
+const getTopicArn = async (serviceId, eventTypeName) => {
   const text = queries.getTopicArn;
-  const values = [eventTypeUuid];
+  const values = [serviceId, eventTypeName];
 
   try {
     const response = await db.query(text, values);
     let event_type = response.rows[0];
     return event_type.sns_topic_arn;
   } catch (error) {
-    console.log(error);
+    console.error(error);
     return;
   }
 };
@@ -109,13 +128,13 @@ const addEventToSNS = async (userUuid, payload, topicArn) => {
 };
 
 const addEventToDb = async (userUuid, eventUuid, body) => {
-  const { event_type_id, payload, idempotency_key } = body;
-  const eventTypeId = await uuidToId("event_types", event_type_id);
+  const { event_type, payload, idempotency_key } = body;
+  const eventType = await getEventTypeInfo(event_type);
   const userId = await uuidToId("users", userUuid);
   const text = queries.addEvent;
   const values = [
     eventUuid,
-    eventTypeId,
+    eventType.id,
     userId,
     JSON.stringify(payload),
     idempotency_key,
@@ -124,7 +143,8 @@ const addEventToDb = async (userUuid, eventUuid, body) => {
   const response = await db.query(text, values);
   const event = response.rows[0];
   return {
-    event_type_id,
+    event_type_id: eventType.uuid,
+    event_type,
     user_id: userUuid,
     uuid: event.uuid,
     payload: event.payload,

@@ -28,7 +28,7 @@ exports.handler = async (event) => {
   if (eventUuid && httpMethod === "GET") {
     return await getEvent(eventUuid);
   } else if (httpMethod === "POST") {
-    return await createEvent(userUuid, body);
+    return await createEvent(serviceUuid, userUuid, body);
   } else if (httpMethod === "GET") {
     return await listEvents(userUuid);
   }
