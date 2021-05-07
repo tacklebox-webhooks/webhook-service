@@ -20,13 +20,14 @@ const queries = {
     WHERE messages.uuid = $1`,
   getResendArn:
     "SELECT sns_topic_arn FROM event_types WHERE name = 'manual_message'",
-  getMessage: `SELECT uuid, event_id, endpoint, delivery_attempt, created_at, delivered
+  getMessage: `SELECT uuid, endpoint, delivery_attempt, status_code, created_at, delivered
   FROM messages WHERE uuid = $1`,
-  listMessages: `SELECT messages.uuid, event_id, endpoint, delivery_attempt, messages.created_at, delivered
+  listMessages: `SELECT messages.uuid, events.uuid AS event_id, messages.endpoint, delivery_attempt, status_code, messages.created_at, delivered
   FROM messages
   JOIN events ON messages.event_id = events.id
   JOIN users ON events.user_id = users.id
-  WHERE users.uuid = $1`,
+  WHERE users.uuid = $1
+  ORDER BY messages.created_at DESC`,
 };
 
 module.exports.db = pool;
