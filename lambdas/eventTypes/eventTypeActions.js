@@ -66,7 +66,6 @@ const createEventType = async (name, serviceUuid, accountId) => {
   const REGION = process.env.AWS_REGION;
   const logGroupName = `sns/${REGION}/${accountId}/${snsTopicName}`;
   const logGroupNameFailure = `${logGroupName}/Failure`;
-  // Function name needs to match actual generated name
   const destinationArn = process.env.DESTINATION_ARN;
   const logMessagesFunctionName = process.env.DESTINATION_NAME;
   // Create "success" log group, add permissions and lambda trigger

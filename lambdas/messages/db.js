@@ -18,8 +18,6 @@ const queries = {
     FROM messages
     JOIN events ON messages.event_id = events.id
     WHERE messages.uuid = $1`,
-  getResendArn:
-    "SELECT sns_topic_arn FROM event_types WHERE name = 'manual_message'",
   getMessage: `SELECT uuid, endpoint, delivery_attempt, status_code, created_at, delivered
   FROM messages WHERE uuid = $1`,
   listMessages: `SELECT messages.uuid, events.uuid AS event_id, messages.endpoint, delivery_attempt, status_code, messages.created_at, delivered

@@ -7,7 +7,6 @@ const uuidToPK = async (uuid, table) => {
   const values = [uuid];
 
   const response = await db.query(text, values);
-  console.log(response.rows);
   let responseBody = response.rows[0];
   return responseBody.id;
 };

@@ -1,5 +1,5 @@
 const AWS = require("aws-sdk");
-AWS.config.update({ region: "us-east-1" });
+AWS.config.update({ region: process.env.AWS_REGION });
 const sns = new AWS.SNS({ apiVersion: "2010-03-31" });
 const { db, queries } = require("./db");
 const { uuidToId, newResponse } = require("./utils");
@@ -32,7 +32,6 @@ const createEndpoint = async (userUuid, url, eventTypes) => {
   const userId = await uuidToId("users", userUuid);
 
   // Create endpoint in DB
-
   let endpoint;
 
   try {
@@ -43,6 +42,31 @@ const createEndpoint = async (userUuid, url, eventTypes) => {
     endpoint.eventTypes = [];
   } catch (error) {
     console.error(error);
+    return newResponse(500, {
+      error_type: "process_failed",
+      detail: "Could not create subscription.",
+    });
+  }
+
+  // Subscribe endpoint to "manual message" topic
+  try {
+    const FilterPolicy = JSON.stringify({ endpoint_url: [endpoint.url] });
+
+    const snsAttributes = {
+      RawMessageDelivery: "true",
+      FilterPolicy,
+    };
+
+    const snsParams = {
+      Protocol: "https",
+      TopicArn: process.env.RESEND_ARN,
+      Attributes: snsAttributes,
+      Endpoint: endpoint.url,
+      ReturnSubscriptionArn: true,
+    };
+
+    const subscription = await sns.subscribe(snsParams).promise();
+  } catch (error) {
     return newResponse(500, {
       error_type: "process_failed",
       detail: "Could not create subscription.",

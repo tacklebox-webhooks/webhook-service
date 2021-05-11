@@ -13,7 +13,7 @@ const resendMessage = async (messageUuid, serviceUuid) => {
       });
     }
 
-    const resend_arn = await getResendArn(serviceUuid);
+    const resend_arn = process.env.RESEND_ARN;
     const params = createParams(message, resend_arn);
     await sns.publish(params).promise();
     return newResponse(202, {});
@@ -33,16 +33,6 @@ const getMessageToResend = async (messageUuid) => {
   const response = await db.query(text, values);
   const message = response.rows[0];
   return message;
-};
-
-const getResendArn = async (serviceUuid) => {
-  const queryString = queries.getResendArn;
-  const response = await db.query(queryString);
-  let eventType = response.rows[0];
-
-  if (eventType) {
-    return eventType.sns_topic_arn;
-  }
 };
 
 const createParams = (message, resend_arn) => {

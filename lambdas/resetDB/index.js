@@ -13,7 +13,6 @@ const handler = async () => {
 
   try {
     const response = await db.query(schemaString);
-    console.log(response.rows);
     return newResponse(200, response.rows);
   } catch (error) {
     console.error(error);
