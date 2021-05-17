@@ -1,4 +1,5 @@
-const { db, queries } = require("./db");
+const db = require("./db");
+const sns = require("./sns");
 const { newResponse, isValidUuid } = require("./utils");
 
 const createService = async (name) => {
@@ -9,12 +10,8 @@ const createService = async (name) => {
     });
   }
 
-  const text = queries.createService;
-  const values = [name];
-
   try {
-    const response = await db.query(text, values);
-    let service = response.rows[0];
+    const service = await db.createService(name);
     return newResponse(201, service);
   } catch (error) {
     console.error(error);
@@ -25,20 +22,36 @@ const createService = async (name) => {
   }
 };
 
-const listServices = async () => {
-  const queryString = queries.listServices;
+const deleteEventTypes = async (serviceUuid) => {
+  const eventTypesToDelete = await db.getEventTypes(serviceUuid);
+  await sns.deleteEventTypes(eventTypesToDelete);
+  await db.deleteEventTypes(serviceUuid);
+};
 
+const deleteService = async (serviceUuid) => {
   try {
-    const response = await db.query(queryString);
-    let services = response.rows;
-    return newResponse(200, services);
+    const deletedService = await db.deleteService(serviceUuid);
+    if (!deletedService) {
+      return newResponse(404, {
+        error_type: "invalid_parameter",
+        detail: "Service not found",
+      });
+    }
+    await deleteSubscriptions(deletedService.id);
+    await db.deleteEndpoints(deletedService.id);
+    await db.deleteUsers(deletedService.id);
+    await deleteEventTypes(deletedService.id);
+    return newResponse(204, {});
   } catch (error) {
     console.error(error);
-    return newResponse(500, {
-      error_type: "process_failed",
-      detail: "Could not get services.",
-    });
+    return newResponse(500, { Error: "Could not delete service" });
   }
+};
+
+const deleteSubscriptions = async (serviceId) => {
+  const subscriptionsToDelete = await db.getSubscriptions(serviceId);
+  await sns.deleteSubscriptions(subscriptionsToDelete);
+  await db.deleteSubscriptions(serviceId);
 };
 
 const getService = async (serviceUuid) => {
@@ -49,13 +62,8 @@ const getService = async (serviceUuid) => {
     });
   }
 
-  const text = queries.getService;
-  const values = [serviceUuid];
-
   try {
-    const response = await db.query(text, values);
-    const service = response.rows[0];
-
+    const service = await db.getService(serviceUuid);
     if (!service) {
       return newResponse(404, {
         error_type: "data_not_found",
@@ -73,26 +81,21 @@ const getService = async (serviceUuid) => {
   }
 };
 
-// const deleteService = async (serviceUuid) => {
-//   const text = queries.deleteService;
-//   const values = [serviceUuid];
-
-//   try {
-//     // all need to delete related topics
-//     const response = await db.query(text, values);
-//     if (response.rows.length === 0) {
-//       return newResponse(404, { Error: 'Service not found'});
-//     } else {
-//       return newResponse(204, { Success: 'Service was deleted'});
-//     }
-//   } catch (error) {
-//     console.error(error);
-//     return newResponse(500, { Error: 'Could not delete service' });
-//   }
-// };
+const listServices = async () => {
+  try {
+    const services = await db.listServices();
+    return newResponse(200, services);
+  } catch (error) {
+    console.error(error);
+    return newResponse(500, {
+      error_type: "process_failed",
+      detail: "Could not get services.",
+    });
+  }
+};
 
 module.exports = {
-  // deleteService,
+  deleteService,
   getService,
   createService,
   listServices,

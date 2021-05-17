@@ -1,17 +1,20 @@
 "use strict";
-const { getService, createService, listServices } = require("./serviceActions");
+const {
+  deleteService,
+  getService,
+  createService,
+  listServices,
+} = require("./serviceActions");
 
 exports.handler = async (event) => {
   let { pathParameters, httpMethod, body } = event;
   body = JSON.parse(body);
-  const serviceUuid = pathParameters
-    ? pathParameters.service_id
-    : pathParameters;
+  const serviceUuid = pathParameters && pathParameters.service_id;
 
   if (serviceUuid) {
     switch (httpMethod) {
-      // case 'DELETE':
-      //   return await deleteService(serviceId);
+      case "DELETE":
+        return await deleteService(serviceUuid);
       case "GET":
         return await getService(serviceUuid);
     }
