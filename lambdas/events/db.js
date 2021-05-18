@@ -13,22 +13,26 @@ const pool = new Pool({
   port,
 });
 
+const nullTimeValue = "1970-01-01T00:00:00.000Z";
+
 const queries = {
   getEvent: `SELECT events.uuid, event_types.uuid as event_type_id, event_types.name as event_type_name, users.uuid as user_id, payload, idempotency_key
     FROM events 
     JOIN event_types ON events.event_type_id = event_types.id
     JOIN users ON events.user_id = users.id
-    WHERE events.uuid = $1`,
+    WHERE events.uuid = $1 AND events.deleted_at = '${nullTimeValue}'`,
   hasUniqueIdempotencyKey: `SELECT uuid FROM events WHERE idempotency_key = $1`,
-  getTopicArn: `SELECT sns_topic_arn FROM event_types WHERE service_id = $1 AND name = $2`,
+  getTopicArn: `SELECT sns_topic_arn
+    FROM event_types
+    WHERE service_id = $1 AND name = $2 AND deleted_at = '${nullTimeValue}'`,
   addEvent: `INSERT INTO events (uuid, event_type_id, user_id, payload, idempotency_key)
     VALUES ($1, $2, $3, $4, $5)
     RETURNING *`,
   listEvents: `SELECT events.uuid, event_types.uuid as event_type_id, event_types.name as event_type_name, users.uuid as user_id, payload, idempotency_key
-      FROM events 
-      JOIN event_types ON events.event_type_id = event_types.id
-      JOIN users ON events.user_id = users.id
-      WHERE users.uuid = $1`,
+    FROM events
+    JOIN event_types ON events.event_type_id = event_types.id
+    JOIN users ON events.user_id = users.id
+    WHERE users.uuid = $1 AND events.deleted_at = '${nullTimeValue}'`,
 };
 
 module.exports.db = pool;

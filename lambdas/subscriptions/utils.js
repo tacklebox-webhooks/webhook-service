@@ -1,6 +1,34 @@
-const { db } = require("./db");
-
+const db = require("./db");
+const { InvalidArgumentError } = require("./error");
 const VALID_UUID = /^[A-F\d]{8}-[A-F\d]{4}-4[A-F\d]{3}-[89AB][A-F\d]{3}-[A-F\d]{12}$/i;
+
+const extractChanges = (subscriptions, event_types) => {
+  const toDelete = subscriptions.filter(
+    (subscription) => !event_types.includes(subscription.name)
+  );
+  const toAdd = event_types.filter((event_type) => {
+    return !subscriptions.find((subscription) => {
+      return subscription.name === event_type;
+    });
+  });
+
+  return { toDelete, toAdd };
+};
+
+const formatEndpoint = (endpoint, subscriptions, deleted, added) => {
+  subscriptions = subscriptions.map((subscription) => subscription.name);
+  subscriptions = subscriptions.filter(
+    (subscription) => !deleted.includes(subscription)
+  );
+  subscriptions = [...subscriptions, ...added];
+
+  return {
+    uuid: endpoint.uuid,
+    url: endpoint.url,
+    created_at: endpoint.created_at,
+    eventTypes: subscriptions,
+  };
+};
 
 const newResponse = (statusCode, body) => {
   return {
@@ -14,43 +42,54 @@ const newResponse = (statusCode, body) => {
   };
 };
 
-const uuidToId = async (table, uuid) => {
-  const text = `SELECT id FROM ${table} WHERE uuid = $1`;
-  const values = [uuid];
-
-  try {
-    const response = await db.query(text, values);
-    const responseBody = response.rows[0];
-    return responseBody.id;
-  } catch (error) {
-    console.log(error);
-    return;
+const validateEventTypes = async (serviceUuid, names) => {
+  if (!names || names.length === 0) {
+    throw new InvalidArgumentError(
+      `A non-empty 'eventTypes' list must be included`
+    );
   }
+  await Promise.all(
+    names.map(async (name) => {
+      const eventType = await db.getEventType(serviceUuid, name);
+      if (!eventType) {
+        throw new InvalidArgumentError(`Event Type '${name}' does not exist`);
+      }
+    })
+  );
 };
 
-const isValidService = async (serviceUuid) => {
+const validateService = async (serviceUuid) => {
   if (!VALID_UUID.test(serviceUuid)) {
-    return false;
+    throw new InvalidArgumentError(`No service matches uuid '${serviceUuid}'`);
   }
-
-  const text = `SELECT uuid FROM services WHERE uuid = $1`;
-  const values = [serviceUuid];
-  const response = await db.query(text, values);
-  return response.rows.length > 0;
+  const service = db.getService(serviceUuid);
+  if (!service) {
+    throw new InvalidArgumentError(`No service matches uuid '${serviceUuid}'`);
+  }
 };
 
-const isValidUser = async (userUuid) => {
+const validateUrl = (url) => {
+  if (!url) {
+    throw new InvalidArgumentError(`A non-empty 'url' must be included`);
+  }
+};
+
+const validateUser = async (userUuid) => {
   if (!VALID_UUID.test(userUuid)) {
-    return false;
+    throw new InvalidArgumentError(`No user matches uuid '${userUuid}'`);
   }
-
-  const text = `SELECT uuid FROM users WHERE uuid = $1`;
-  const values = [userUuid];
-  const response = await db.query(text, values);
-  return response.rows.length > 0;
+  const user = db.getService(userUuid);
+  if (!user) {
+    throw new InvalidArgumentError(`No user matches uuid '${userUuid}'`);
+  }
 };
 
-module.exports.newResponse = newResponse;
-module.exports.isValidService = isValidService;
-module.exports.isValidUser = isValidUser;
-module.exports.uuidToId = uuidToId;
+module.exports = {
+  extractChanges,
+  formatEndpoint,
+  newResponse,
+  validateEventTypes,
+  validateService,
+  validateUrl,
+  validateUser,
+};
