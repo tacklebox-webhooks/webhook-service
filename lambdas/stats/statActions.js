@@ -17,17 +17,23 @@ const getStats = async (serviceUuid) => {
     const endpointsResponse = await db.query(queries.countEndpoints, values);
     const eventsResponse = await db.query(queries.countEvents, values);
     const messagesResponse = await db.query(queries.countMessages, values);
+    const failedMessagesResponse = await db.query(
+      queries.countFailedMessages,
+      values
+    );
 
     const users = usersResponse.rows[0].count;
     const endpoints = endpointsResponse.rows[0].count;
     const events = eventsResponse.rows[0].count;
     const messages = messagesResponse.rows[0].count;
+    const failedMessages = failedMessagesResponse.rows[0].count;
 
     const counts = {
       users,
       endpoints,
       events,
       messages,
+      failedMessages,
     };
 
     return newResponse(200, counts);
