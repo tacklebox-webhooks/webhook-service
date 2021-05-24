@@ -108,7 +108,7 @@ const uuidToId = async (table, uuid) => {
   try {
     const response = await db.query(text, values);
     const responseBody = response.rows[0];
-    return responseBody.id;
+    return responseBody && responseBody.id;
   } catch (error) {
     console.log(error);
     return;

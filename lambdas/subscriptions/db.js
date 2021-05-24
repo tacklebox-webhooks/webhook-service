@@ -141,7 +141,7 @@ const uuidToId = async (table, uuid) => {
   const queryParams = [uuid];
   const response = await db.query(query, queryParams);
   const entity = response.rows[0];
-  return entity.id;
+  return entity && entity.id;
 };
 
 module.exports = {
