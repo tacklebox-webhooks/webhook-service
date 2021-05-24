@@ -72,7 +72,12 @@ const createEvent = async (serviceUuid, userUuid, body) => {
   }
 
   try {
-    const eventUuid = await addEventToSNS(userUuid, body.payload, topicArn);
+    const eventUuid = await addEventToSns(
+      userUuid,
+      body.payload,
+      body.event_type,
+      topicArn
+    );
     const newEvent = await addEventToDb(userUuid, eventUuid, body);
     return newResponse(202, newEvent);
   } catch (error) {
@@ -111,7 +116,8 @@ const getTopicArn = async (serviceId, eventTypeName) => {
   }
 };
 
-const addEventToSNS = async (userUuid, payload, topicArn) => {
+const addEventToSns = async (userUuid, payload, event_type, topicArn) => {
+  payload = { ...payload, event_type };
   const params = {
     TopicArn: topicArn,
     Message: JSON.stringify(payload),
