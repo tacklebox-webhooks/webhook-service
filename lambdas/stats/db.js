@@ -31,9 +31,10 @@ const getEndpointCount = async (serviceId) => {
 const getMessagesByDay = async (serviceId) => {
   const query = `SELECT count(m.id) as count, date_trunc('day', m.created_at) as day FROM messages m
     JOIN events e ON e.id = m.event_id
-    JOIN event_types et ON et.id = e.event_type_id
-    WHERE et.service_id = $1
+    JOIN users ON e.user_id = users.id
+    WHERE users.service_id = $1
     GROUP BY date_trunc('day', m.created_at)`;
+
   const queryParams = [serviceId];
   return await getEntities(query, queryParams);
 };
@@ -41,8 +42,8 @@ const getMessagesByDay = async (serviceId) => {
 const getMessagesByMonth = async (serviceId) => {
   const query = `SELECT count(m.id) as count, date_trunc('month', m.created_at) as month FROM messages m
     JOIN events e ON e.id = m.event_id
-    JOIN event_types et ON et.id = e.event_type_id
-    WHERE et.service_id = $1
+    JOIN users ON e.user_id = users.id
+    WHERE users.service_id = $1
     GROUP BY date_trunc('month', m.created_at)`;
   const queryParams = [serviceId];
   return await getEntities(query, queryParams);
