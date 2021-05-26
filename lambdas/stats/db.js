@@ -28,6 +28,26 @@ const getEndpointCount = async (serviceId) => {
   return await getCount(query, queryParams);
 };
 
+const getMessagesByDay = async (serviceId) => {
+  const query = `SELECT count(m.id) as count, date_trunc('day', m.created_at) as day FROM messages m
+    JOIN events e ON e.id = m.event_id
+    JOIN event_types et ON et.id = e.event_type_id
+    WHERE et.service_id = $1
+    GROUP BY date_trunc('day', m.created_at)`;
+  const queryParams = [serviceId];
+  return await getEntities(query, queryParams);
+};
+
+const getMessagesByMonth = async (serviceId) => {
+  const query = `SELECT count(m.id) as count, date_trunc('month', m.created_at) as month FROM messages m
+    JOIN events e ON e.id = m.event_id
+    JOIN event_types et ON et.id = e.event_type_id
+    WHERE et.service_id = $1
+    GROUP BY date_trunc('month', m.created_at)`;
+  const queryParams = [serviceId];
+  return await getEntities(query, queryParams);
+};
+
 const getEntities = async (query, queryParams) => {
   const response = await db.query(query, queryParams);
   console.log(query, queryParams, response);
@@ -36,11 +56,27 @@ const getEntities = async (query, queryParams) => {
 };
 
 const getEvents = async (serviceId) => {
-  const query = `SELECT e.uuid, ep.url as endpoint, et.name as type FROM events e
-    JOIN event_types et ON et.id = e.event_type_id
+  const query = `SELECT count(*) as count FROM events e
     JOIN users u ON u.id = e.user_id
-    JOIN endpoints ep ON ep.user_id = u.id
     WHERE u.service_id = $1`;
+  const queryParams = [serviceId];
+  return await getCount(query, queryParams);
+};
+
+const getEventsByType = async (serviceId) => {
+  const query = `SELECT count(et.name), et.name as type FROM events e
+    JOIN event_types et ON et.id = e.event_type_id
+    WHERE et.service_id = $1
+    GROUP BY et.name`;
+  const queryParams = [serviceId];
+  return await getEntities(query, queryParams);
+};
+
+const getEventsByUser = async (serviceId) => {
+  const query = `SELECT count(u.name), u.name as user FROM events e
+    JOIN users u ON u.id = e.user_id
+    WHERE u.service_id = $1
+    GROUP BY u.name`;
   const queryParams = [serviceId];
   return await getEntities(query, queryParams);
 };
@@ -72,7 +108,11 @@ const uuidToId = async (table, uuid) => {
 module.exports = {
   getEndpointCount,
   getEvents,
+  getEventsByType,
+  getEventsByUser,
   getMessages,
+  getMessagesByDay,
+  getMessagesByMonth,
   getUserCount,
   uuidToId,
 };
