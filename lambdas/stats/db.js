@@ -82,10 +82,10 @@ const getEventsByUser = async (serviceId) => {
 };
 
 const getMessages = async (serviceId) => {
-  const query = `SELECT m.uuid, m.status_code, m.created_at, m.delivered FROM messages m
-    JOIN events e ON e.id = m.event_id
-    JOIN event_types et ON et.id = e.event_type_id
-    WHERE et.service_id = $1`;
+  const query = `SELECT messages.uuid, messages.status_code, messages.created_at, messages.delivered FROM messages
+  JOIN events ON events.id = messages.event_id
+  JOIN users ON events.user_id = users.id
+  WHERE users.service_id = $1`;
   const queryParams = [serviceId];
   return await getEntities(query, queryParams);
 };
