@@ -1,4 +1,5 @@
 const { Pool } = require("pg");
+const { isValidUuid } = require("./utils");
 const nullTimeValue = "1970-01-01T00:00:00.000Z";
 const user = process.env.DATABASE_USER;
 const password = process.env.DATABASE_PASSWORD;
