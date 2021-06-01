@@ -1,73 +1,70 @@
-const db = require("./db");
-const { newResponse, isValidUuid } = require("./utils");
+const db = require('./db');
+const { newResponse } = require('./utils');
 
-const getStats = async (serviceUuid) => {
-  if (!isValidUuid(serviceUuid)) {
-    return newResponse(404, {
-      error_Type: "data_not_found",
-      detail: "No service matches given uuid.",
-    });
-  }
+const getStats = async (serviceId) => {
+  const firstMessageDate = await db.getFirstMessageDate(serviceId);
+  // Simple count queries
+  const endpointCount = await db.getEndpointCount(serviceId);
+  const eventCount = await db.getEventCount(serviceId);
+  const failedMessageCount = await db.getFailedMessageCount(serviceId);
+  const messageCount = await db.getMessageCount(serviceId);
+  const userCount = await db.getUserCount(serviceId);
+  // Compound count queries
+  const eventsByType = await db.getEventsByType(serviceId);
+  const eventsByUser = await db.getEventsByUser(serviceId);
+  const messagesByDay = await db.getMessagesByDay(serviceId);
+  const messagesByMonth = await db.getMessagesByMonth(serviceId);
+  const messagesByStatus = await db.getMessagesByStatus(serviceId);
+  const messagesByYear = await db.getMessagesByYear(serviceId);
+  const subscriptions = await getSubscriptions(serviceId);
 
-  try {
-    const serviceId = await db.uuidToId("services", serviceUuid);
-    const endpoints = await db.getEndpointCount(serviceId);
-    const events = await db.getEvents(serviceId);
-    const eventsByType = await db.getEventsByType(serviceId);
-    const eventsByUser = await db.getEventsByUser(serviceId);
-    const messages = await db.getMessages(serviceId);
-    const messagesByDay = await db.getMessagesByDay(serviceId);
-    const messagesByMonth = await db.getMessagesByMonth(serviceId);
-    const users = await db.getUserCount(serviceId);
+  const counts = {
+    endpoints: endpointCount,
+    events: {
+      byType: eventsByType,
+      byUser: eventsByUser,
+      total: eventCount,
+    },
+    messages: {
+      byDay: messagesByDay,
+      byMonth: messagesByMonth,
+      byStatus: messagesByStatus,
+      byYear: messagesByYear,
+      failed: failedMessageCount,
+      first: firstMessageDate,
+      total: messageCount,
+    },
+    subscriptions,
+    users: userCount,
+  };
 
-    const failedMessages = getFailedMessageCount(messages);
-    const messagesByStatus = getMessagesByStatus(messages);
-
-    const counts = {
-      endpoints,
-      events: {
-        byType: eventsByType,
-        byUser: eventsByUser,
-        total: events,
-      },
-      messages: {
-        byDay: messagesByDay,
-        byMonth: messagesByMonth,
-        byStatus: messagesByStatus,
-        failed: failedMessages,
-        total: messages.length,
-      },
-      users,
-    };
-
-    return newResponse(200, counts);
-  } catch (error) {
-    console.error(error);
-    return newResponse(500, {
-      error_type: "process_failed",
-      detail: "Could not get service.",
-    });
-  }
+  return newResponse(200, counts);
 };
 
-const getFailedMessageCount = (messages) => {
-  const deliveryStatuses = messages.map((message) =>
-    message.delivered ? 0 : 1
-  );
-  return deliveryStatuses.reduce((sum, curr) => sum + curr, 0);
+const getEventTypes = async (serviceId) => {
+  const eventTypes = await db.getEventTypes(serviceId);
+  return newResponse(200, eventTypes);
 };
 
-const getMessagesByStatus = (messages) => {
-  const counts = {};
-  messages.forEach((event) => {
-    if (!counts[event.status_code]) {
-      counts[event.status_code] = 0;
+const getSubscriptions = async (userId) => {
+  let subscriptions = await db.getEventTypeCountByEndpoint(userId);
+  const messageCounts = await db.getMessageCountByEndpoint(userId);
+  subscriptions = subscriptions.map((subscription) => {
+    subscription['failure_rate'] = 0.0;
+    const counts = messageCounts[subscription.url];
+    if (counts) {
+      const { all, failed } = counts;
+      const failureRate = failed / all;
+      subscription['failure_rate'] = failureRate;
     }
-    counts[event.status_code] += 1;
+    return subscription;
   });
-  return counts;
+
+  return newResponse(200, subscriptions);
 };
 
 module.exports = {
   getStats,
+  getEventTypes,
+  getSubscriptions,
 };
