@@ -63,8 +63,14 @@ const getSubscriptions = async (userId) => {
   return newResponse(200, subscriptions);
 };
 
+const getEvents = async (userId) => {
+  const events = await db.getEventsWithMessageCount(userId);
+  return newResponse(200, events);
+};
+
 module.exports = {
   getStats,
+  getEvents,
   getEventTypes,
   getSubscriptions,
 };

@@ -100,6 +100,24 @@ const getEventsByUser = async (serviceId) => {
   }, {});
 };
 
+const getEventsWithMessageCount = async (userId) => {
+  const query = `SELECT e.uuid, e.event_type_id, et.name as event_type_name, e.user_id, e.created_at, e.payload, e.idempotency_key, count(m.id)
+    FROM events e
+    LEFT JOIN messages m ON m.event_id = e.id
+    JOIN event_types et ON et.id = e.event_type_id
+    JOIN users u ON u.id = e.user_id
+    WHERE e.user_id = $1
+    GROUP BY e.id, et.id
+    ORDER BY e.created_at DESC`;
+  const queryParams = [userId];
+  const counts = await getEntities(query, queryParams);
+  return counts;
+  // return counts.reduce((agg, curr) => {
+  //   agg[curr.user] = curr.count;
+  //   return agg;
+  // }, {});
+};
+
 const getEventTypeCountByEndpoint = async (userId) => {
   const query = `SELECT e.uuid, e.created_at, e.url, array_agg(et.name) AS event_types
     FROM endpoints e
@@ -247,11 +265,11 @@ const getEntities = async (query, queryParams) => {
 };
 
 const getEventTypes = async (serviceId) => {
-  const query = `SELECT et.name, et.created_at, count(s.event_type_id) as subscribers
+  const query = `SELECT et.uuid, et.name, et.created_at, count(s.event_type_id) as subscribers
     FROM event_types et
     LEFT JOIN subscriptions s ON s.event_type_id = et.id
     WHERE et.service_id = $1 AND et.deleted_at = '${nullTimeValue}'
-    GROUP BY et.name, et.created_at, s.event_type_id`;
+    GROUP BY et.id, s.event_type_id`;
   const queryParams = [serviceId];
   const entities = await getEntities(query, queryParams);
   return entities;
@@ -290,6 +308,7 @@ module.exports = {
   getEventCount,
   getEventsByType,
   getEventsByUser,
+  getEventsWithMessageCount,
   getEventTypeCountByEndpoint,
   getEventTypes,
   getFailedMessageCount,
