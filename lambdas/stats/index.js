@@ -1,5 +1,11 @@
 'use strict';
-const { getStats, getEventTypes, getSubscriptions } = require('./statActions');
+const {
+  getStats,
+  getEvents,
+  getEventTypes,
+  getMessages,
+  getSubscriptions,
+} = require('./statActions');
 const { newResponse, isValidUuid } = require('./utils');
 const db = require('./db');
 
@@ -7,7 +13,6 @@ exports.handler = async (event) => {
   let { pathParameters, queryStringParameters: params } = event;
   const serviceUuid = pathParameters && pathParameters.service_id;
   const userUuid = params && params.user;
-  console.log(params);
   if (!isValidUuid(serviceUuid)) {
     return newResponse(404, {
       error_type: 'invalid_parameter',
@@ -43,6 +48,8 @@ exports.handler = async (event) => {
       switch (params.type) {
         case 'subscriptions':
           return await getSubscriptions(user.id);
+        case 'events':
+          return await getEvents(user.id);
       }
     }
 
