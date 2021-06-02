@@ -16,7 +16,6 @@ const getStats = async (serviceId) => {
   const messagesByMonth = await db.getMessagesByMonth(serviceId);
   const messagesByStatus = await db.getMessagesByStatus(serviceId);
   const messagesByYear = await db.getMessagesByYear(serviceId);
-  const subscriptions = await getSubscriptions(serviceId);
 
   const counts = {
     endpoints: endpointCount,
@@ -34,7 +33,6 @@ const getStats = async (serviceId) => {
       first: firstMessageDate,
       total: messageCount,
     },
-    subscriptions,
     users: userCount,
   };
 

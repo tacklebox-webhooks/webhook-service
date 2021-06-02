@@ -202,15 +202,18 @@ const getFirstMessageDate = async (serviceId) => {
   const queryParams = [serviceId];
   const response = await db.query(query, queryParams);
   const messageData = response.rows;
-  const { created_at } = messageData[0];
-  if (created_at) {
-    const firstDate = new Date(created_at);
-    return {
-      day: firstDate.getDate() - 1,
-      month: firstDate.getMonth(),
-      year: firstDate.getFullYear(),
-    };
+
+  if (messageData.length === 0) {
+    return {};
   }
+
+  const { created_at } = messageData[0];
+  const firstDate = new Date(created_at);
+  return {
+    day: firstDate.getDate() - 1,
+    month: firstDate.getMonth(),
+    year: firstDate.getFullYear(),
+  };
 };
 
 // Utility functions
