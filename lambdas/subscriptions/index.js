@@ -11,6 +11,11 @@ const {
 exports.handler = async (event) => {
   let { pathParameters, httpMethod, body } = event;
   body = JSON.parse(body);
+  
+  if (body.event_types) {
+    body.eventTypes = body.event_types;
+  }
+  
   const endpointUuid = pathParameters && pathParameters.subscription_id;
   const serviceUuid = pathParameters && pathParameters.service_id;
   const userUuid = pathParameters && pathParameters.user_id;

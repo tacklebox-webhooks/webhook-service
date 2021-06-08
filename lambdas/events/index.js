@@ -5,6 +5,15 @@ const { newResponse, isValidService, isValidUser } = require("./utils");
 exports.handler = async (event) => {
   let { pathParameters, httpMethod, body } = event;
   body = JSON.parse(body);
+  
+  if (body.eventType) {
+    body.event_type = body.eventType;
+  }
+  
+  if (body.idempotencyKey) {
+    body.idempotency_key = body.idempotencyKey;
+  }
+  
   const eventUuid = pathParameters ? pathParameters.event_id : pathParameters;
 
   const userUuid = pathParameters ? pathParameters.user_id : pathParameters;
